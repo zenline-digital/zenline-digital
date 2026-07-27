@@ -132,6 +132,7 @@ export default function App() {
   const [notice, setNotice]           = useState(null);
   const [geminiKey, setGeminiKey]     = useState("");
   const [brandVoice, setBrandVoice]   = useState("Premium, raw, aspirational. We speak to serious UAE gym-goers who demand elite performance and quality activewear.");
+  const [platformApprovals, setPlatformApprovals] = useState({ instagram: false, facebook: false, tiktok: false });
   const month = 7; const year = 2026;
 
   // ── Load persisted data on startup ──────────────────────────────────────────
@@ -479,84 +480,68 @@ Return JSON only, no markdown:
 
   function Approval() {
     const post = selectedPost || pending[0];
-    const [platformApprovals, setPlatformApprovals] = useState({});
     const platforms = [
       { id: "instagram", label: "Instagram", color: "#E1306C", icon: "📸", handle: "@thugfit.ae" },
       { id: "facebook",  label: "Facebook",  color: "#1877F2", icon: "📘", handle: "THUGFIT" },
       { id: "tiktok",    label: "TikTok",    color: "#010101", icon: "🎵", handle: "@thugfit.ae" },
     ];
 
+    const allSelected = platforms.every(p => platformApprovals[p.id]);
+    const selectedCount = platforms.filter(p => platformApprovals[p.id]).length;
+
     function togglePlatform(pid) {
       setPlatformApprovals(prev => ({ ...prev, [pid]: !prev[pid] }));
     }
 
-    async function approveSelected() {
+    function selectAll() {
+      const val = !allSelected;
+      setPlatformApprovals({ instagram: val, facebook: val, tiktok: val });
+    }
+
+    async function doApprove() {
       const approved = platforms.filter(p => platformApprovals[p.id]).map(p => p.id);
-      if (approved.length === 0) { notify("Select at least one platform to approve", "err"); return; }
+      if (approved.length === 0) { notify("Tick at least one platform first", "err"); return; }
       await approvePost(post, approved.join(","));
+      setPlatformApprovals({ instagram: false, facebook: false, tiktok: false });
+    }
+
+    async function doReject() {
+      rejectPost(post);
+      setPlatformApprovals({ instagram: false, facebook: false, tiktok: false });
     }
 
     if (!post) return (
       <div style={{ ...card, textAlign: "center", padding: "64px 20px" }}>
-        <div style={{ fontSize: 36, marginBottom: 14, color: C.teal }}>✓</div>
+        <div style={{ fontSize: 40, marginBottom: 14, color: C.teal }}>✓</div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>All caught up!</div>
-        <div style={{ fontSize: 13, color: C.muted }}>No posts pending approval. Go to the Planner and click ⚡ Generate on any post.</div>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+          No posts pending approval.<br />Go to the Planner and click ⚡ Generate on any post.
+        </div>
+        <button onClick={() => setPage("planner")} style={{ ...btn(C.purple), marginTop: 16 }}>Go to Planner</button>
       </div>
     );
 
-    function PlatformPreview({ platform }) {
-      const approved = platformApprovals[platform.id];
-      return (
-        <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", border: approved ? `2px solid ${platform.color}` : "2px solid transparent", transition: "border 0.2s", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
-          <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
-            <span style={{ fontSize: 14 }}>{platform.icon}</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: platform.color }}>{platform.label}</span>
-            <span style={{ fontSize: 10, color: "#888", marginLeft: 4 }}>{platform.handle}</span>
-            <div style={{ marginLeft: "auto", color: "#888", fontSize: 14 }}>···</div>
-          </div>
-          <div style={{ width: "100%", aspectRatio: "1", background: "#f0f0f0", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            {post.image_url
-              ? <img src={post.image_url} alt="Post" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ textAlign: "center", color: "#aaa", fontSize: 11 }}><div style={{ fontSize: 24, marginBottom: 4 }}>🎨</div>No image</div>}
-          </div>
-          <div style={{ padding: "8px 10px 12px" }}>
-            <div style={{ display: "flex", gap: 10, marginBottom: 6, fontSize: 16 }}>♡ 🗨 ✈</div>
-            <div style={{ fontSize: 10, color: "#000", lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 700 }}>{platform.handle} </span>
-              {(post.caption || "").slice(0, 100)}...
-            </div>
-          </div>
-          <div style={{ padding: "0 10px 10px" }}>
-            <button onClick={() => togglePlatform(platform.id)} style={{
-              width: "100%", padding: "7px 0", borderRadius: 6, border: "none", cursor: "pointer",
-              background: approved ? platform.color : "#f0f0f0",
-              color: approved ? "#fff" : "#666",
-              fontSize: 11, fontWeight: 700, fontFamily: "inherit", transition: "all 0.2s"
-            }}>
-              {approved ? "✓ Approved" : "Tap to Approve"}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>Approval Queue</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{pending.length} post{pending.length !== 1 ? "s" : ""} waiting · Approve per platform</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{pending.length} post{pending.length !== 1 ? "s" : ""} waiting for review</div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {pending.map((p, i) => (
-              <button key={i} onClick={() => { setSelectedPost(p); setPlatformApprovals({}); }} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${p === post ? C.purple : C.border}`, background: p === post ? `${C.purple}20` : C.card, color: p === post ? C.purple : C.muted, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>{i + 1}</button>
+              <button key={i} onClick={() => { setSelectedPost(p); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
+                style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${p === post ? C.purple : C.border}`, background: p === post ? `${C.purple}20` : C.card, color: p === post ? C.purple : C.muted, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
+                {i + 1}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Post info */}
-        <div style={{ ...card, marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        {/* Post topic bar */}
+        <div style={{ ...card, marginBottom: 16, padding: "14px 18px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{post.topic}</div>
               <div>
@@ -565,25 +550,64 @@ Return JSON only, no markdown:
                 <span style={badge(C.muted)}>{post.day_of_week}</span>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={approveSelected} style={btn(C.teal)}>
-                ✓ Approve Selected ({Object.values(platformApprovals).filter(Boolean).length})
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button onClick={selectAll} style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: allSelected ? `${C.purple}20` : "transparent", color: allSelected ? C.purple : C.muted, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                {allSelected ? "✓ All Selected" : "Select All"}
               </button>
-              <button onClick={() => rejectPost(post)} style={btn(C.danger, true)}>✗ Reject All</button>
+              <button onClick={doApprove} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: selectedCount > 0 ? C.teal : "#1C2537", color: selectedCount > 0 ? "#fff" : C.muted, cursor: selectedCount > 0 ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, fontFamily: "inherit", transition: "all 0.2s" }}>
+                ✓ Approve {selectedCount > 0 ? `(${selectedCount})` : ""}
+              </button>
+              <button onClick={doReject} style={{ padding: "9px 16px", borderRadius: 8, border: `1px solid ${C.danger}`, background: "transparent", color: C.danger, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
+                ✗ Reject
+              </button>
             </div>
           </div>
         </div>
 
-        {/* 3 platform previews */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 }}>
-          {platforms.map(p => <PlatformPreview key={p.id} platform={p} />)}
+        {/* Platform previews with checkboxes */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 16 }}>
+          {platforms.map(p => {
+            const isChecked = platformApprovals[p.id];
+            return (
+              <div key={p.id} onClick={() => togglePlatform(p.id)} style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", border: `2px solid ${isChecked ? p.color : C.border}`, transition: "all 0.2s", boxShadow: isChecked ? `0 0 20px ${p.color}30` : "0 4px 20px rgba(0,0,0,0.3)", background: "#fff" }}>
+                {/* Platform header with checkbox */}
+                <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, background: isChecked ? p.color : "#f8f8f8", transition: "background 0.2s" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${isChecked ? "#fff" : "#ccc"}`, background: isChecked ? "#fff" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
+                    {isChecked && <span style={{ color: p.color, fontSize: 13, fontWeight: 900 }}>✓</span>}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: isChecked ? "#fff" : p.color }}>{p.icon} {p.label}</span>
+                  <span style={{ fontSize: 10, color: isChecked ? "#ffffff90" : "#888", marginLeft: "auto" }}>{p.handle}</span>
+                </div>
+                {/* Image */}
+                <div style={{ width: "100%", aspectRatio: "1", background: "#f0f0f0", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {post.image_url
+                    ? <img src={post.image_url} alt="Post" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <div style={{ textAlign: "center", color: "#aaa", fontSize: 11 }}><div style={{ fontSize: 24, marginBottom: 4 }}>🎨</div>No image</div>}
+                </div>
+                {/* Caption preview */}
+                <div style={{ padding: "10px 12px 14px" }}>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 18 }}>♡ 🗨 ✈</div>
+                  <div style={{ fontSize: 11, color: "#000", lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 700 }}>{p.handle} </span>
+                    {(post.caption || "").slice(0, 90)}...
+                  </div>
+                </div>
+                {/* Tap indicator */}
+                <div style={{ padding: "0 12px 12px" }}>
+                  <div style={{ padding: "7px", borderRadius: 6, background: isChecked ? `${p.color}15` : "#f0f0f0", textAlign: "center", fontSize: 11, fontWeight: 700, color: isChecked ? p.color : "#888", transition: "all 0.2s" }}>
+                    {isChecked ? "✓ Selected for approval" : "Tap to select"}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Caption & Hashtags */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div style={card}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Caption</div>
-            <div style={{ fontSize: 13, lineHeight: 1.65, maxHeight: 120, overflowY: "auto" }}>{post.caption || "No caption"}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.65, maxHeight: 130, overflowY: "auto" }}>{post.caption || "No caption"}</div>
           </div>
           <div style={card}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Hashtags</div>
