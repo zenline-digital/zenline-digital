@@ -1,6 +1,6 @@
-const https = require('https');
+import https from 'https';
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -24,17 +24,17 @@ module.exports = async function handler(req, res) {
           'anthropic-version': '2023-06-01'
         }
       };
-      const reqHttp = https.request(options, (r) => {
+      const r = https.request(options, (resp) => {
         let raw = '';
-        r.on('data', chunk => raw += chunk);
-        r.on('end', () => {
-          try { resolve({ status: r.statusCode, body: JSON.parse(raw) }); }
-          catch (e) { reject(new Error('Invalid JSON from Anthropic: ' + raw.slice(0, 100))); }
+        resp.on('data', chunk => raw += chunk);
+        resp.on('end', () => {
+          try { resolve({ status: resp.statusCode, body: JSON.parse(raw) }); }
+          catch (e) { reject(new Error('Anthropic returned: ' + raw.slice(0, 200))); }
         });
       });
-      reqHttp.on('error', reject);
-      reqHttp.write(postData);
-      reqHttp.end();
+      r.on('error', reject);
+      r.write(postData);
+      r.end();
     });
 
     return res.status(data.status).json(data.body);
@@ -42,4 +42,4 @@ module.exports = async function handler(req, res) {
     console.error('Claude proxy error:', error.message);
     return res.status(500).json({ error: { message: error.message } });
   }
-};
+}
