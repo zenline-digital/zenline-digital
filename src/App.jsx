@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Chat from "./Chat.jsx";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://ioniqxioapcdgenpksex.supabase.co";
@@ -32,7 +33,7 @@ const supa = {
 
 // ─── Claude API ───────────────────────────────────────────────────────────────
 async function claude(system, user, maxTokens = 1000) {
-  const r = await fetch("/api/claude", {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] })
@@ -97,6 +98,7 @@ const NAV = [
   { id: "approval",  label: "Approvals",       icon: "✓" },
   { id: "calendar",  label: "Calendar",        icon: "⊞" },
   { id: "settings",  label: "Settings",        icon: "⚙" },
+  { id: "chat",     label: "Team Chat",        icon: "💬" },
 ];
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
@@ -589,7 +591,37 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 ALTER TABLE monthly_plans DISABLE ROW LEVEL SECURITY;
-ALTER TABLE posts DISABLE ROW LEVEL SECURITY;`}
+ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  chat_id text NOT NULL,
+  role text NOT NULL,
+  content text NOT NULL,
+  agent_id text,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS agent_skills (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  agent_id text UNIQUE NOT NULL,
+  skills jsonb DEFAULT '[]',
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS change_log (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  agent_id text,
+  change_type text,
+  description text,
+  requested_by text,
+  chat_id text,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE chat_messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_skills DISABLE ROW LEVEL SECURITY;
+ALTER TABLE change_log DISABLE ROW LEVEL SECURITY;`}
             </pre>
           </div>
         </div>
@@ -648,6 +680,7 @@ ALTER TABLE posts DISABLE ROW LEVEL SECURITY;`}
           {page === "queue"     && <Queue />}
           {page === "calendar"  && <Calendar />}
           {page === "settings"  && <Settings />}
+          {page === "chat"     && <Chat brandVoice={brandVoice} />}
         </div>
       </div>
 
