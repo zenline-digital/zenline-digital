@@ -337,21 +337,34 @@ Return JSON only, no markdown:
     }
   }
 
-  async function approvePost(post, platforms = "instagram,facebook,tiktok") {
+  async function approvePost(post, approvedPlatforms) {
     try {
-      if (post.id) {
-        await supa.patch("posts", { status: "approved", platform: platforms }, `id=eq.${post.id}`);
+      // Work out which platforms were already approved and which remain
+      const allPlatforms = ["instagram", "facebook", "tiktok"];
+      const alreadyApproved = (post.approved_platforms || "").split(",").filter(Boolean);
+      const newlyApproved = approvedPlatforms.split(",").filter(Boolean);
+      const totalApproved = [...new Set([...alreadyApproved, ...newlyApproved])];
+      const remaining = allPlatforms.filter(p => !totalApproved.includes(p));
+
+      if (remaining.length === 0) {
+        // All platforms approved — move fully to queue
+        if (post.id) await supa.patch("posts", { status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(",") }, `id=eq.${post.id}`);
+        setPending(p => p.filter(x => x.id !== post.id && x !== post));
+        setPosts(p => [...p.filter(x => x.id !== post.id), { ...post, status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(","), remaining_platforms: "" }]);
+        setSelectedPost(null);
+        notify(`✓ All platforms approved — moved to Content Queue`);
+      } else {
+        // Some platforms still pending — keep in approvals with updated state
+        const updatedPost = { ...post, approved_platforms: totalApproved.join(","), remaining_platforms: remaining.join(","), platform: totalApproved.join(",") };
+        if (post.id) await supa.patch("posts", { approved_platforms: totalApproved.join(","), remaining_platforms: remaining.join(",") }, `id=eq.${post.id}`);
+        setPending(p => p.map(x => (x.id === post.id || x === post) ? updatedPost : x));
+        if (selectedPost === post) setSelectedPost(updatedPost);
+        notify(`✓ ${newlyApproved.join(", ")} approved · Still pending: ${remaining.join(", ")}`);
       }
-      setPending(p => p.filter(x => x.id !== post.id && x !== post));
-      setPosts(p => [...p.filter(x => x.id !== post.id), { ...post, status: "approved", platform: platforms }]);
-      setSelectedPost(null);
-      log("Social Media Manager", "Post approved ✓", `${post.topic} → ${platforms}`);
-      notify(`✓ Approved for: ${platforms.replace(/,/g, ", ")}`);
+
+      log("Social Media Manager", "Platform approved", `${newlyApproved.join(", ")} ✓ · Remaining: ${remaining.join(", ") || "none"}`);
     } catch (e) {
-      notify("Approval saved locally", "warn");
-      setPending(p => p.filter(x => x !== post));
-      setPosts(p => [...p, { ...post, status: "approved", platform: platforms }]);
-      setSelectedPost(null);
+      notify("Error: " + e.message, "err");
     }
   }
 
@@ -480,26 +493,26 @@ Return JSON only, no markdown:
 
   function Approval() {
     const post = selectedPost || pending[0];
-    const platforms = [
+    const allPlatforms = [
       { id: "instagram", label: "Instagram", color: "#E1306C", icon: "📸", handle: "@thugfit.ae" },
       { id: "facebook",  label: "Facebook",  color: "#1877F2", icon: "📘", handle: "THUGFIT" },
       { id: "tiktok",    label: "TikTok",    color: "#010101", icon: "🎵", handle: "@thugfit.ae" },
     ];
 
+    const approvedSoFar = (post?.approved_platforms || "").split(",").filter(Boolean);
+    const platforms = allPlatforms.filter(p => !approvedSoFar.includes(p.id));
     const selectedCount = platforms.filter(p => platformApprovals[p.id]).length;
-    const allSelected = selectedCount === platforms.length;
+    const allSelected = selectedCount === platforms.length && platforms.length > 0;
 
     function togglePlatform(pid) {
       setPlatformApprovals(prev => ({ ...prev, [pid]: !prev[pid] }));
     }
-
     function selectAll() {
       const val = !allSelected;
       const next = {};
       platforms.forEach(p => next[p.id] = val);
       setPlatformApprovals(next);
     }
-
     async function doApprove() {
       const approved = platforms.filter(p => platformApprovals[p.id]).map(p => p.id);
       if (approved.length === 0) { notify("Select at least one platform first", "err"); return; }
@@ -507,22 +520,21 @@ Return JSON only, no markdown:
       setPlatformApprovals({ instagram: false, facebook: false, tiktok: false });
     }
 
-    if (!post) return (
+    if (!post || platforms.length === 0) return (
       <div style={{ ...card, textAlign: "center", padding: "64px 20px" }}>
         <div style={{ fontSize: 40, marginBottom: 14, color: C.teal }}>✓</div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>All caught up!</div>
-        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>No posts pending approval.<br />Go to the Planner and click ⚡ Generate on any post.</div>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>No posts pending approval.<br />Go to the Planner and click ⚡ Generate.</div>
         <button onClick={() => setPage("planner")} style={{ ...btn(C.purple), marginTop: 16 }}>Go to Planner</button>
       </div>
     );
 
     return (
       <div>
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>Approval Queue</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{pending.length} post{pending.length !== 1 ? "s" : ""} waiting · Tick platforms below then click Approve</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{pending.length} post{pending.length !== 1 ? "s" : ""} waiting · Tick platforms then click Approve</div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {pending.map((p, i) => (
@@ -534,15 +546,15 @@ Return JSON only, no markdown:
           </div>
         </div>
 
-        {/* Topic + action bar */}
         <div style={{ ...card, marginBottom: 16, padding: "14px 18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{post.topic}</div>
-              <div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <span style={badge(TYPE_COLORS[post.content_type] || C.purple)}>{post.content_type?.replace("_", " ")}</span>
-                <span style={badge(C.muted)}>Week {post.week_number}</span>
-                <span style={badge(C.muted)}>{post.day_of_week}</span>
+                <span style={badge(C.muted)}>Week {post.week_number} · {post.day_of_week}</span>
+                {approvedSoFar.length > 0 && <span style={badge(C.teal)}>✓ Done: {approvedSoFar.join(", ")}</span>}
+                <span style={badge(C.amber)}>Pending: {platforms.map(p => p.label).join(", ")}</span>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -550,23 +562,21 @@ Return JSON only, no markdown:
                 {allSelected ? "✓ All Selected" : "Select All"}
               </button>
               <button onClick={doApprove} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: selectedCount > 0 ? C.teal : C.border, color: selectedCount > 0 ? "#fff" : C.muted, cursor: selectedCount > 0 ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }}>
-                ✓ Approve {selectedCount > 0 ? `(${selectedCount} platform${selectedCount > 1 ? "s" : ""})` : ""}
+                ✓ Approve {selectedCount > 0 ? `(${selectedCount})` : ""}
               </button>
               <button onClick={() => { rejectPost(post); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
                 style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.danger}`, background: "transparent", color: C.danger, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
-                ✗ Reject
+                ✗ Reject All
               </button>
             </div>
           </div>
         </div>
 
-        {/* Platform cards — click anywhere on card to tick it */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${platforms.length},1fr)`, gap: 16, marginBottom: 16 }}>
           {platforms.map(p => {
             const ticked = !!platformApprovals[p.id];
             return (
               <div key={p.id} style={{ borderRadius: 12, overflow: "hidden", border: `2px solid ${ticked ? p.color : C.border}`, boxShadow: ticked ? `0 0 20px ${p.color}30` : "none", background: "#fff", transition: "all 0.2s" }}>
-                {/* Clickable checkbox header */}
                 <div onClick={() => togglePlatform(p.id)} style={{ padding: "11px 14px", display: "flex", alignItems: "center", gap: 10, background: ticked ? p.color : "#f5f5f5", cursor: "pointer", transition: "background 0.2s" }}>
                   <div style={{ width: 22, height: 22, borderRadius: 5, border: `2px solid ${ticked ? "#fff" : "#bbb"}`, background: ticked ? "#fff" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {ticked && <span style={{ color: p.color, fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✓</span>}
@@ -574,23 +584,20 @@ Return JSON only, no markdown:
                   <span style={{ fontSize: 13, fontWeight: 700, color: ticked ? "#fff" : p.color }}>{p.icon} {p.label}</span>
                   <span style={{ fontSize: 10, color: ticked ? "#ffffff80" : "#999", marginLeft: "auto" }}>{p.handle}</span>
                 </div>
-                {/* Image */}
                 <div style={{ width: "100%", aspectRatio: "1", background: "#eee", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {post.image_url
                     ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <div style={{ color: "#aaa", textAlign: "center", fontSize: 11 }}><div style={{ fontSize: 24 }}>🎨</div>No image</div>}
                 </div>
-                {/* Caption preview */}
                 <div style={{ padding: "10px 12px" }}>
                   <div style={{ display: "flex", gap: 10, marginBottom: 6, fontSize: 18 }}>♡ 🗨 ✈</div>
                   <div style={{ fontSize: 11, color: "#111", lineHeight: 1.5 }}>
                     <span style={{ fontWeight: 700 }}>{p.handle} </span>{(post.caption || "").slice(0, 80)}...
                   </div>
                 </div>
-                {/* Approve this platform directly */}
                 <div style={{ padding: "0 12px 12px" }}>
                   <button onClick={(e) => { e.stopPropagation(); approvePost(post, p.id); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
-                    style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: `none`, cursor: "pointer", background: p.color, color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }}>
+                    style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer", background: p.color, color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }}>
                     ✓ Approve {p.label} only
                   </button>
                 </div>
@@ -599,7 +606,6 @@ Return JSON only, no markdown:
           })}
         </div>
 
-        {/* Caption & Hashtags */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div style={card}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Caption</div>
