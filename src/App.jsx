@@ -45,15 +45,23 @@ async function claude(system, user, maxTokens = 1000) {
 
 // ─── Gemini Image API ─────────────────────────────────────────────────────────
 async function geminiImage(apiKey, prompt) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-image:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "1:1" } })
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+    })
   });
   const d = await r.json();
-  if (d.predictions?.[0]?.bytesBase64Encoded) return `data:image/png;base64,${d.predictions[0].bytesBase64Encoded}`;
   if (d.error) throw new Error(d.error.message);
-  throw new Error("No image returned from Gemini");
+  const parts = d.candidates?.[0]?.content?.parts || [];
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    }
+  }
+  throw new Error("No image returned from Gemini — enable billing at console.cloud.google.com");
 }
 
 function parseJSON(text) {
