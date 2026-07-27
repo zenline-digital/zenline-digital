@@ -486,8 +486,8 @@ Return JSON only, no markdown:
       { id: "tiktok",    label: "TikTok",    color: "#010101", icon: "🎵", handle: "@thugfit.ae" },
     ];
 
-    const allSelected = platforms.every(p => platformApprovals[p.id]);
     const selectedCount = platforms.filter(p => platformApprovals[p.id]).length;
+    const allSelected = selectedCount === platforms.length;
 
     function togglePlatform(pid) {
       setPlatformApprovals(prev => ({ ...prev, [pid]: !prev[pid] }));
@@ -495,18 +495,15 @@ Return JSON only, no markdown:
 
     function selectAll() {
       const val = !allSelected;
-      setPlatformApprovals({ instagram: val, facebook: val, tiktok: val });
+      const next = {};
+      platforms.forEach(p => next[p.id] = val);
+      setPlatformApprovals(next);
     }
 
     async function doApprove() {
       const approved = platforms.filter(p => platformApprovals[p.id]).map(p => p.id);
-      if (approved.length === 0) { notify("Tick at least one platform first", "err"); return; }
+      if (approved.length === 0) { notify("Select at least one platform first", "err"); return; }
       await approvePost(post, approved.join(","));
-      setPlatformApprovals({ instagram: false, facebook: false, tiktok: false });
-    }
-
-    async function doReject() {
-      rejectPost(post);
       setPlatformApprovals({ instagram: false, facebook: false, tiktok: false });
     }
 
@@ -514,9 +511,7 @@ Return JSON only, no markdown:
       <div style={{ ...card, textAlign: "center", padding: "64px 20px" }}>
         <div style={{ fontSize: 40, marginBottom: 14, color: C.teal }}>✓</div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>All caught up!</div>
-        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-          No posts pending approval.<br />Go to the Planner and click ⚡ Generate on any post.
-        </div>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>No posts pending approval.<br />Go to the Planner and click ⚡ Generate on any post.</div>
         <button onClick={() => setPage("planner")} style={{ ...btn(C.purple), marginTop: 16 }}>Go to Planner</button>
       </div>
     );
@@ -527,7 +522,7 @@ Return JSON only, no markdown:
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>Approval Queue</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{pending.length} post{pending.length !== 1 ? "s" : ""} waiting for review</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{pending.length} post{pending.length !== 1 ? "s" : ""} waiting · Tick platforms below then click Approve</div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {pending.map((p, i) => (
@@ -539,7 +534,7 @@ Return JSON only, no markdown:
           </div>
         </div>
 
-        {/* Post topic bar */}
+        {/* Topic + action bar */}
         <div style={{ ...card, marginBottom: 16, padding: "14px 18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
             <div>
@@ -550,53 +545,54 @@ Return JSON only, no markdown:
                 <span style={badge(C.muted)}>{post.day_of_week}</span>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={selectAll} style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: allSelected ? `${C.purple}20` : "transparent", color: allSelected ? C.purple : C.muted, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={selectAll} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: allSelected ? `${C.purple}20` : "transparent", color: allSelected ? C.purple : C.muted, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
                 {allSelected ? "✓ All Selected" : "Select All"}
               </button>
-              <button onClick={doApprove} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: selectedCount > 0 ? C.teal : "#1C2537", color: selectedCount > 0 ? "#fff" : C.muted, cursor: selectedCount > 0 ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, fontFamily: "inherit", transition: "all 0.2s" }}>
-                ✓ Approve {selectedCount > 0 ? `(${selectedCount})` : ""}
+              <button onClick={doApprove} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: selectedCount > 0 ? C.teal : C.border, color: selectedCount > 0 ? "#fff" : C.muted, cursor: selectedCount > 0 ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }}>
+                ✓ Approve {selectedCount > 0 ? `(${selectedCount} platform${selectedCount > 1 ? "s" : ""})` : ""}
               </button>
-              <button onClick={doReject} style={{ padding: "9px 16px", borderRadius: 8, border: `1px solid ${C.danger}`, background: "transparent", color: C.danger, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
+              <button onClick={() => { rejectPost(post); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
+                style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.danger}`, background: "transparent", color: C.danger, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
                 ✗ Reject
               </button>
             </div>
           </div>
         </div>
 
-        {/* Platform previews with checkboxes */}
+        {/* Platform cards — click anywhere on card to tick it */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 16 }}>
           {platforms.map(p => {
-            const isChecked = platformApprovals[p.id];
+            const ticked = !!platformApprovals[p.id];
             return (
-              <div key={p.id} onClick={() => togglePlatform(p.id)} style={{ cursor: "pointer", borderRadius: 12, overflow: "hidden", border: `2px solid ${isChecked ? p.color : C.border}`, transition: "all 0.2s", boxShadow: isChecked ? `0 0 20px ${p.color}30` : "0 4px 20px rgba(0,0,0,0.3)", background: "#fff" }}>
-                {/* Platform header with checkbox */}
-                <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, background: isChecked ? p.color : "#f8f8f8", transition: "background 0.2s" }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${isChecked ? "#fff" : "#ccc"}`, background: isChecked ? "#fff" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
-                    {isChecked && <span style={{ color: p.color, fontSize: 13, fontWeight: 900 }}>✓</span>}
+              <div key={p.id} style={{ borderRadius: 12, overflow: "hidden", border: `2px solid ${ticked ? p.color : C.border}`, boxShadow: ticked ? `0 0 20px ${p.color}30` : "none", background: "#fff", transition: "all 0.2s" }}>
+                {/* Clickable checkbox header */}
+                <div onClick={() => togglePlatform(p.id)} style={{ padding: "11px 14px", display: "flex", alignItems: "center", gap: 10, background: ticked ? p.color : "#f5f5f5", cursor: "pointer", transition: "background 0.2s" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 5, border: `2px solid ${ticked ? "#fff" : "#bbb"}`, background: ticked ? "#fff" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {ticked && <span style={{ color: p.color, fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✓</span>}
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: isChecked ? "#fff" : p.color }}>{p.icon} {p.label}</span>
-                  <span style={{ fontSize: 10, color: isChecked ? "#ffffff90" : "#888", marginLeft: "auto" }}>{p.handle}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: ticked ? "#fff" : p.color }}>{p.icon} {p.label}</span>
+                  <span style={{ fontSize: 10, color: ticked ? "#ffffff80" : "#999", marginLeft: "auto" }}>{p.handle}</span>
                 </div>
                 {/* Image */}
-                <div style={{ width: "100%", aspectRatio: "1", background: "#f0f0f0", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                <div style={{ width: "100%", aspectRatio: "1", background: "#eee", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {post.image_url
-                    ? <img src={post.image_url} alt="Post" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <div style={{ textAlign: "center", color: "#aaa", fontSize: 11 }}><div style={{ fontSize: 24, marginBottom: 4 }}>🎨</div>No image</div>}
+                    ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <div style={{ color: "#aaa", textAlign: "center", fontSize: 11 }}><div style={{ fontSize: 24 }}>🎨</div>No image</div>}
                 </div>
                 {/* Caption preview */}
-                <div style={{ padding: "10px 12px 14px" }}>
-                  <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 18 }}>♡ 🗨 ✈</div>
-                  <div style={{ fontSize: 11, color: "#000", lineHeight: 1.5 }}>
-                    <span style={{ fontWeight: 700 }}>{p.handle} </span>
-                    {(post.caption || "").slice(0, 90)}...
+                <div style={{ padding: "10px 12px" }}>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 6, fontSize: 18 }}>♡ 🗨 ✈</div>
+                  <div style={{ fontSize: 11, color: "#111", lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 700 }}>{p.handle} </span>{(post.caption || "").slice(0, 80)}...
                   </div>
                 </div>
-                {/* Tap indicator */}
+                {/* Approve this platform directly */}
                 <div style={{ padding: "0 12px 12px" }}>
-                  <div style={{ padding: "7px", borderRadius: 6, background: isChecked ? `${p.color}15` : "#f0f0f0", textAlign: "center", fontSize: 11, fontWeight: 700, color: isChecked ? p.color : "#888", transition: "all 0.2s" }}>
-                    {isChecked ? "✓ Selected for approval" : "Tap to select"}
-                  </div>
+                  <button onClick={() => { setPlatformApprovals({ instagram: false, facebook: false, tiktok: false, [p.id]: true }); setTimeout(doApprove, 50); }}
+                    style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer", background: ticked ? p.color : "#f0f0f0", color: ticked ? "#fff" : "#666", fontSize: 12, fontWeight: 700, fontFamily: "inherit", transition: "all 0.2s" }}>
+                    {ticked ? `✓ Approve ${p.label} only` : `Approve ${p.label} only`}
+                  </button>
                 </div>
               </div>
             );
@@ -607,7 +603,7 @@ Return JSON only, no markdown:
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div style={card}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Caption</div>
-            <div style={{ fontSize: 13, lineHeight: 1.65, maxHeight: 130, overflowY: "auto" }}>{post.caption || "No caption"}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.65, maxHeight: 120, overflowY: "auto" }}>{post.caption || "No caption"}</div>
           </div>
           <div style={card}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Hashtags</div>
@@ -620,7 +616,20 @@ Return JSON only, no markdown:
 
   function Queue() {
     const statusColor = { pending_approval: C.amber, approved: C.teal, scheduled: C.purple, published: C.blue, rejected: C.danger };
+    const [scheduling, setScheduling] = useState(null);
+    const [schedDate, setSchedDate] = useState("");
+    const [schedTime, setSchedTime] = useState("09:00");
     const all = [...pending.map(p => ({ ...p, _s: "pending_approval" })), ...posts.map(p => ({ ...p, _s: p.status }))];
+
+    async function schedulePost(post) {
+      if (!schedDate) { notify("Pick a date first", "err"); return; }
+      const scheduledAt = new Date(`${schedDate}T${schedTime}`).toISOString();
+      if (post.id) await supa.patch("posts", { status: "scheduled", scheduled_at: scheduledAt }, `id=eq.${post.id}`);
+      setPosts(p => p.map(x => x.id === post.id || x === post ? { ...x, status: "scheduled", scheduled_at: scheduledAt } : x));
+      setScheduling(null);
+      notify(`✓ Scheduled for ${schedDate} at ${schedTime}`);
+    }
+
     return (
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Content Queue</div>
@@ -628,19 +637,72 @@ Return JSON only, no markdown:
           ? <div style={{ ...card, textAlign: "center", padding: "64px 20px", color: C.muted }}>No content yet. Open the Planner and click ⚡ Generate on any post.</div>
           : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {all.map((post, i) => (
-              <div key={i} onClick={() => { if (post._s === "pending_approval") { setSelectedPost(post); setPage("approval"); } }}
-                style={{ ...card, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, cursor: post._s === "pending_approval" ? "pointer" : "default" }}>
-                <div style={{ width: 44, height: 44, borderRadius: 8, background: C.border, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+              <div key={i} style={{ ...card, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 8, background: C.border, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                   {post.image_url ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🖼"}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{post.topic}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Week {post.week_number} · {post.day_of_week} · {post.content_type?.replace("_", " ")}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    Week {post.week_number} · {post.day_of_week} · {post.content_type?.replace("_", " ")}
+                    {post.scheduled_at && <span style={{ color: C.purple }}> · Scheduled {new Date(post.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(post.scheduled_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>}
+                    {post.platform && <span style={{ color: C.muted }}> · {post.platform}</span>}
+                  </div>
                 </div>
-                <span style={badge(statusColor[post._s] || C.muted)}>{post._s?.replace(/_/g, " ")}</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {post._s === "approved" && (
+                    <button onClick={() => { setScheduling(post); setSchedDate(""); setSchedTime("09:00"); }}
+                      style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: C.purple, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                      📅 Schedule
+                    </button>
+                  )}
+                  {post._s === "pending_approval" && (
+                    <button onClick={() => { setSelectedPost(post); setPage("approval"); }}
+                      style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: `${C.amber}20`, color: C.amber, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                      Review
+                    </button>
+                  )}
+                  <span style={badge(statusColor[post._s] || C.muted)}>{post._s?.replace(/_/g, " ")}</span>
+                </div>
               </div>
             ))}
           </div>}
+
+        {/* Schedule Modal */}
+        {scheduling && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
+            onClick={e => { if (e.target === e.currentTarget) setScheduling(null); }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, width: 380, boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Schedule Post</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 20, lineHeight: 1.5 }}>{scheduling.topic}</div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+                {scheduling.image_url && <img src={scheduling.image_url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover" }} />}
+                <div>
+                  <div style={{ ...badge(TYPE_COLORS[scheduling.content_type] || C.purple) }}>{scheduling.content_type?.replace("_", " ")}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Platforms: {scheduling.platform}</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Date</div>
+                <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Time (UAE time)</div>
+                <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)}
+                  style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => schedulePost(scheduling)} style={{ ...btn(C.purple), flex: 1 }}>📅 Confirm Schedule</button>
+                <button onClick={() => setScheduling(null)} style={btn(C.card, true)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
