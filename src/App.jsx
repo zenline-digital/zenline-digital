@@ -32,7 +32,7 @@ const supa = {
 
 // ─── Claude API ───────────────────────────────────────────────────────────────
 async function claude(system, user, maxTokens = 1000) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const r = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] })
