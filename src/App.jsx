@@ -619,6 +619,7 @@ Return JSON only, no markdown:
     const [scheduling, setScheduling] = useState(null);
     const [schedDate, setSchedDate] = useState("");
     const [schedTime, setSchedTime] = useState("09:00");
+    const [expanded, setExpanded] = useState(null);
     const all = [...pending.map(p => ({ ...p, _s: "pending_approval" })), ...posts.map(p => ({ ...p, _s: p.status }))];
 
     async function schedulePost(post) {
@@ -630,40 +631,91 @@ Return JSON only, no markdown:
       notify(`✓ Scheduled for ${schedDate} at ${schedTime}`);
     }
 
+    async function deletePost(post) {
+      if (post.id) await supa.patch("posts", { status: "deleted" }, `id=eq.${post.id}`);
+      setPosts(p => p.filter(x => x.id !== post.id && x !== post));
+      setPending(p => p.filter(x => x.id !== post.id && x !== post));
+      setExpanded(null);
+      notify("Post deleted from queue");
+    }
+
+    async function unschedule(post) {
+      if (post.id) await supa.patch("posts", { status: "approved", scheduled_at: null }, `id=eq.${post.id}`);
+      setPosts(p => p.map(x => x.id === post.id ? { ...x, status: "approved", scheduled_at: null } : x));
+      notify("Post unscheduled — back to approved");
+    }
+
     return (
       <div>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Content Queue</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Content Queue</div>
+          <div style={{ fontSize: 12, color: C.muted }}>{all.length} post{all.length !== 1 ? "s" : ""} total</div>
+        </div>
+
         {all.length === 0
           ? <div style={{ ...card, textAlign: "center", padding: "64px 20px", color: C.muted }}>No content yet. Open the Planner and click ⚡ Generate on any post.</div>
           : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {all.map((post, i) => (
-              <div key={i} style={{ ...card, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 8, background: C.border, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                  {post.image_url ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🖼"}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{post.topic}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                    Week {post.week_number} · {post.day_of_week} · {post.content_type?.replace("_", " ")}
-                    {post.scheduled_at && <span style={{ color: C.purple }}> · Scheduled {new Date(post.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(post.scheduled_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>}
-                    {post.platform && <span style={{ color: C.muted }}> · {post.platform}</span>}
+              <div key={i}>
+                <div style={{ ...card, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: C.border, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                    {post.image_url ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🖼"}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{post.topic}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                      Week {post.week_number} · {post.day_of_week} · {post.content_type?.replace("_", " ")}
+                      {post.scheduled_at && <span style={{ color: C.purple }}> · {new Date(post.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(post.scheduled_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>}
+                      {post.platform && <span> · {post.platform}</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    {post._s === "approved" && (
+                      <button onClick={() => { setScheduling(post); setSchedDate(""); setSchedTime("09:00"); }}
+                        style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: `${C.purple}20`, color: C.purple, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
+                        📅 Schedule
+                      </button>
+                    )}
+                    {post._s === "scheduled" && (
+                      <button onClick={() => unschedule(post)}
+                        style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: `${C.amber}20`, color: C.amber, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
+                        ✕ Unschedule
+                      </button>
+                    )}
+                    {post._s === "pending_approval" && (
+                      <button onClick={() => { setSelectedPost(post); setPage("approval"); }}
+                        style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: `${C.amber}20`, color: C.amber, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
+                        Review
+                      </button>
+                    )}
+                    <span style={badge(statusColor[post._s] || C.muted)}>{post._s?.replace(/_/g, " ")}</span>
+                    <button onClick={() => setExpanded(expanded === i ? null : i)}
+                      style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 14, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      ⋯
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {post._s === "approved" && (
-                    <button onClick={() => { setScheduling(post); setSchedDate(""); setSchedTime("09:00"); }}
-                      style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: C.purple, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
-                      📅 Schedule
-                    </button>
-                  )}
-                  {post._s === "pending_approval" && (
-                    <button onClick={() => { setSelectedPost(post); setPage("approval"); }}
-                      style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: `${C.amber}20`, color: C.amber, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
-                      Review
-                    </button>
-                  )}
-                  <span style={badge(statusColor[post._s] || C.muted)}>{post._s?.replace(/_/g, " ")}</span>
-                </div>
+
+                {/* Expanded actions */}
+                {expanded === i && (
+                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "12px 16px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 12, color: C.muted, flex: 1 }}>
+                      {post.caption?.slice(0, 120)}{(post.caption?.length || 0) > 120 ? "..." : ""}
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {(post._s === "approved" || post._s === "scheduled") && (
+                        <button onClick={() => { setSelectedPost(post); setPending(p => [...p, {...post, status:"pending_approval", _s:"pending_approval"}]); setPosts(p => p.filter(x => x !== post)); setPage("approval"); }}
+                          style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                          ✏️ Re-review
+                        </button>
+                      )}
+                      <button onClick={() => deletePost(post)}
+                        style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.danger}`, background: `${C.danger}15`, color: C.danger, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                        🗑 Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>}
@@ -674,16 +726,14 @@ Return JSON only, no markdown:
             onClick={e => { if (e.target === e.currentTarget) setScheduling(null); }}>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, width: 380, boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
               <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Schedule Post</div>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 20, lineHeight: 1.5 }}>{scheduling.topic}</div>
-
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>{scheduling.topic}</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
                 {scheduling.image_url && <img src={scheduling.image_url} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover" }} />}
                 <div>
-                  <div style={{ ...badge(TYPE_COLORS[scheduling.content_type] || C.purple) }}>{scheduling.content_type?.replace("_", " ")}</div>
+                  <span style={badge(TYPE_COLORS[scheduling.content_type] || C.purple)}>{scheduling.content_type?.replace("_", " ")}</span>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Platforms: {scheduling.platform}</div>
                 </div>
               </div>
-
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Date</div>
                 <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)}
@@ -695,7 +745,6 @@ Return JSON only, no markdown:
                 <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)}
                   style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
-
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => schedulePost(scheduling)} style={{ ...btn(C.purple), flex: 1 }}>📅 Confirm Schedule</button>
                 <button onClick={() => setScheduling(null)} style={btn(C.card, true)}>Cancel</button>
