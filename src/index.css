@@ -1,0 +1,10 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body { font-family: 'Space Grotesk', 'Inter', sans-serif; background: #07091A; color: #E2E8F7; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1C2537; border-radius: 2px; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+input, textarea { font-family: inherit; }
+input:focus, textarea:focus { outline: 1px solid #8B7CF8; }
