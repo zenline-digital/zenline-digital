@@ -23,11 +23,20 @@ const supa = {
     return d;
   },
   patch: async (table, body, eq) => {
-    await fetch(`${SUPA_URL}/rest/v1/${table}?${eq}`, {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${eq}`, {
       method: "PATCH",
-      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
       body: JSON.stringify(body)
-    }).catch(() => {});
+    });
+    return r.json();
+  },
+  upsert: async (table, body, onConflict) => {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+      method: "POST",
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "return=representation,resolution=merge-duplicates" },
+      body: JSON.stringify(body)
+    });
+    return r.json();
   }
 };
 
@@ -129,6 +138,18 @@ export default function App() {
   useEffect(() => {
     async function loadSaved() {
       try {
+        // Load settings (Gemini key etc)
+        const sr = await fetch(`${SUPA_URL}/rest/v1/app_settings?select=key,value`, {
+          headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+        });
+        const settings = await sr.json();
+        if (Array.isArray(settings)) {
+          const gemini = settings.find(s => s.key === "gemini_key");
+          if (gemini?.value) setGeminiKey(gemini.value);
+          const bv = settings.find(s => s.key === "brand_voice");
+          if (bv?.value) setBrandVoice(bv.value);
+        }
+
         // Load latest plan
         const pr = await fetch(`${SUPA_URL}/rest/v1/monthly_plans?month=eq.${month}&year=eq.${year}&order=created_at.desc&limit=1`, {
           headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
@@ -316,12 +337,21 @@ Return JSON only, no markdown:
   }
 
   async function approvePost(post, platforms = "instagram,facebook,tiktok") {
-    if (post.id) await supa.patch("posts", { status: "approved", platform: platforms }, `id=eq.${post.id}`);
-    setPending(p => p.filter(x => x !== post));
-    setPosts(p => [...p, { ...post, status: "approved", platform: platforms }]);
-    setSelectedPost(null);
-    log("Social Media Manager", "Post approved ✓", `${post.topic} → ${platforms}`);
-    notify(`Post approved for: ${platforms.replace(/,/g, ", ")}`);
+    try {
+      if (post.id) {
+        await supa.patch("posts", { status: "approved", platform: platforms }, `id=eq.${post.id}`);
+      }
+      setPending(p => p.filter(x => x.id !== post.id && x !== post));
+      setPosts(p => [...p.filter(x => x.id !== post.id), { ...post, status: "approved", platform: platforms }]);
+      setSelectedPost(null);
+      log("Social Media Manager", "Post approved ✓", `${post.topic} → ${platforms}`);
+      notify(`✓ Approved for: ${platforms.replace(/,/g, ", ")}`);
+    } catch (e) {
+      notify("Approval saved locally", "warn");
+      setPending(p => p.filter(x => x !== post));
+      setPosts(p => [...p, { ...post, status: "approved", platform: platforms }]);
+      setSelectedPost(null);
+    }
   }
 
   function rejectPost(post) {
@@ -617,6 +647,15 @@ Return JSON only, no markdown:
   }
 
   function Settings() {
+    async function saveSettings() {
+      try {
+        await supa.upsert("app_settings", { key: "gemini_key", value: geminiKey }, "key");
+        await supa.upsert("app_settings", { key: "brand_voice", value: brandVoice }, "key");
+        notify("Settings saved — Gemini key will persist after refresh");
+      } catch (e) {
+        notify("Settings saved locally (run SQL below to enable full persistence)", "warn");
+      }
+    }
     return (
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Settings</div>
@@ -628,8 +667,7 @@ Return JSON only, no markdown:
               <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..."
                 style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13 }} />
               <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>Get free key → aistudio.google.com → Get API key → Create API key</div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            </div>            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ padding: "10px 14px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8, fontSize: 12, color: C.teal }}>✓ Claude API connected — content generation active</div>
               <div style={{ padding: "10px 14px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8, fontSize: 12, color: C.teal }}>✓ Supabase connected — ioniqxioapcdgenpksex.supabase.co</div>
               <div style={{ padding: "10px 14px", background: `${geminiKey ? C.teal : C.amber}10`, border: `1px solid ${geminiKey ? C.teal : C.amber}30`, borderRadius: 8, fontSize: 12, color: geminiKey ? C.teal : C.amber }}>
@@ -642,6 +680,7 @@ Return JSON only, no markdown:
             <textarea value={brandVoice} onChange={e => setBrandVoice(e.target.value)} rows={4}
               style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13, resize: "vertical", lineHeight: 1.6 }} />
             <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>All 5 AI agents use this to keep every piece of content on-brand</div>
+            <button onClick={saveSettings} style={{ ...btn(C.purple), marginTop: 12 }}>💾 Save Settings</button>
           </div>
           <div style={card}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Database Setup</div>
@@ -697,7 +736,14 @@ CREATE TABLE IF NOT EXISTS change_log (
 
 ALTER TABLE chat_messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_skills DISABLE ROW LEVEL SECURITY;
-ALTER TABLE change_log DISABLE ROW LEVEL SECURITY;`}
+ALTER TABLE change_log DISABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key text PRIMARY KEY,
+  value text,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;`}
             </pre>
           </div>
         </div>
