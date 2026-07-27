@@ -589,9 +589,9 @@ Return JSON only, no markdown:
                 </div>
                 {/* Approve this platform directly */}
                 <div style={{ padding: "0 12px 12px" }}>
-                  <button onClick={() => { setPlatformApprovals({ instagram: false, facebook: false, tiktok: false, [p.id]: true }); setTimeout(doApprove, 50); }}
-                    style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer", background: ticked ? p.color : "#f0f0f0", color: ticked ? "#fff" : "#666", fontSize: 12, fontWeight: 700, fontFamily: "inherit", transition: "all 0.2s" }}>
-                    {ticked ? `✓ Approve ${p.label} only` : `Approve ${p.label} only`}
+                  <button onClick={(e) => { e.stopPropagation(); approvePost(post, p.id); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
+                    style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: `none`, cursor: "pointer", background: p.color, color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }}>
+                    ✓ Approve {p.label} only
                   </button>
                 </div>
               </div>
