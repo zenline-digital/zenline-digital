@@ -47,8 +47,12 @@ async function claude(system, user, maxTokens = 1000) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] })
   });
-  const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
+  const text = await r.text();
+  let d;
+  try { d = JSON.parse(text); }
+  catch { throw new Error("API error: " + text.slice(0, 120)); }
+  if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+  if (!d.content?.[0]?.text) throw new Error("Empty response from API");
   return d.content[0].text;
 }
 
