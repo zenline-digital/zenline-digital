@@ -202,44 +202,51 @@ export default function App() {
     try {
       setActiveAgent("manager");
       log("Social Media Manager", "Starting monthly plan", `${MONTHS[month - 1]} ${year}`);
-      await delay(600);
-
-      setActiveAgent("strategist");
-      log("Content Strategist", "Building content mix", "30% motivation · 25% tips · 20% lifestyle · 15% community · 10% product");
-
-      const text = await claude(
-        `You are the Social Media Manager for THUGFIT, UAE premium gym activewear. Brand voice: ${brandVoice}`,
-        `Create a 4-week Instagram content plan for ${MONTHS[month - 1]} ${year}.
-
-Content pillars: motivation (30%), training_tips (25%), lifestyle (20%), community (15%), product (10% — max 1 per week).
-
-Rules:
-- Exactly 5 posts per week Mon–Fri, 20 total
-- Mix of formats: single image, carousel, reel_script  
-- Topics must be specific and compelling
-- UAE/Dubai fitness culture context where relevant
-
-Return ONLY a valid JSON array of exactly 20 objects, no markdown:
-[{"week":1,"day":"Monday","content_type":"motivation","topic":"specific engaging title","theme":"visual and emotional direction","format":"single"}]
-
-format values: single | carousel | reel_script
-content_type values: motivation | training_tips | lifestyle | community | product`,
-        2000
-      );
-
-      setActiveAgent("manager");
-      log("Social Media Manager", "Reviewing plan quality", "Cross-checking brand alignment...");
       await delay(400);
 
-      let data = parseJSON(text);
-      if (!Array.isArray(data)) throw new Error("Plan format invalid — try again");
+      setActiveAgent("strategist");
+      log("Content Strategist", "Building content mix — weeks 1 & 2", "30% motivation · 25% tips · 20% lifestyle · 15% community · 10% product");
+
+      const prompt = (weeks) =>
+        `You are the Social Media Manager for THUGFIT, UAE premium gym activewear. Brand voice: ${brandVoice}
+
+Create an Instagram content plan for weeks ${weeks} of ${MONTHS[month - 1]} ${year}.
+Content pillars: motivation (30%), training_tips (25%), lifestyle (20%), community (15%), product (10% — max 1 per week).
+Rules: 5 posts per week Mon–Fri, specific compelling UAE/Dubai fitness topics, mix of formats.
+
+Return ONLY a valid JSON array of exactly 10 objects, no markdown:
+[{"week":${weeks.split("-")[0]},"day":"Monday","content_type":"motivation","topic":"specific title","theme":"visual direction","format":"single"}]
+
+format values: single | carousel | reel_script
+content_type values: motivation | training_tips | lifestyle | community | product`;
+
+      // Two fast calls instead of one slow call — each under 10 seconds
+      const [text1, text2] = await Promise.all([
+        claude(`THUGFIT Social Media Manager`, prompt("1-2"), 1000),
+        claude(`THUGFIT Social Media Manager`, prompt("3-4"), 1000)
+      ]);
+
+      setActiveAgent("manager");
+      log("Social Media Manager", "Reviewing plan quality", "Combining all 4 weeks...");
+      await delay(300);
+
+      let part1 = parseJSON(text1);
+      let part2 = parseJSON(text2);
+
+      // Ensure week numbers are correct
+      if (Array.isArray(part2)) {
+        part2 = part2.map(p => ({ ...p, week: p.week < 3 ? p.week + 2 : p.week }));
+      }
+
+      const data = [...(Array.isArray(part1) ? part1 : []), ...(Array.isArray(part2) ? part2 : [])];
+      if (data.length === 0) throw new Error("Plan format invalid — try again");
 
       let planId = null;
       try {
         const saved = await supa.post("monthly_plans", { month, year, status: "draft", plan_data: data });
         planId = saved?.[0]?.id;
       } catch (e) {
-        log("System", "DB note", "Run the SQL in Settings first, then data will save");
+        log("System", "DB note", "Run the SQL in Settings to save plans");
       }
 
       setPlan({ id: planId, month, year, data });
