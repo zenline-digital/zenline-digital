@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Chat from "./Chat.jsx";
+import SEO from "./SEO.jsx";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://ioniqxioapcdgenpksex.supabase.co";
@@ -118,8 +119,9 @@ const NAV = [
   { id: "queue",     label: "Content Queue",   icon: "≡" },
   { id: "approval",  label: "Approvals",       icon: "✓" },
   { id: "calendar",  label: "Calendar",        icon: "⊞" },
+  { id: "seo",       label: "Auto SEO",        icon: "🔍" },
   { id: "settings",  label: "Settings",        icon: "⚙" },
-  { id: "chat",     label: "Team Chat",        icon: "💬" },
+  { id: "chat",      label: "Team Chat",       icon: "💬" },
 ];
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
@@ -143,7 +145,6 @@ export default function App() {
   useEffect(() => {
     async function loadSaved() {
       try {
-        // Load settings (Gemini key etc)
         const sr = await fetch(`${SUPA_URL}/rest/v1/app_settings?select=key,value`, {
           headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
         });
@@ -154,8 +155,6 @@ export default function App() {
           const bv = settings.find(s => s.key === "brand_voice");
           if (bv?.value) setBrandVoice(bv.value);
         }
-
-        // Load latest plan
         const pr = await fetch(`${SUPA_URL}/rest/v1/monthly_plans?month=eq.${month}&year=eq.${year}&order=created_at.desc&limit=1`, {
           headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
         });
@@ -164,8 +163,6 @@ export default function App() {
           const p = plans[0];
           setPlan({ id: p.id, month: p.month, year: p.year, data: p.plan_data });
         }
-
-        // Load posts
         const postr = await fetch(`${SUPA_URL}/rest/v1/posts?order=created_at.desc&limit=100`, {
           headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
         });
@@ -203,7 +200,6 @@ export default function App() {
       setActiveAgent("manager");
       log("Social Media Manager", "Starting monthly plan", `${MONTHS[month - 1]} ${year}`);
       await delay(400);
-
       setActiveAgent("strategist");
       log("Content Strategist", "Building content mix — weeks 1 & 2", "30% motivation · 25% tips · 20% lifestyle · 15% community · 10% product");
 
@@ -220,7 +216,6 @@ Return ONLY a valid JSON array of exactly 10 objects, no markdown:
 format values: single | carousel | reel_script
 content_type values: motivation | training_tips | lifestyle | community | product`;
 
-      // Two fast calls instead of one slow call — each under 10 seconds
       const [text1, text2] = await Promise.all([
         claude(`THUGFIT Social Media Manager`, prompt("1-2"), 1000),
         claude(`THUGFIT Social Media Manager`, prompt("3-4"), 1000)
@@ -232,12 +227,9 @@ content_type values: motivation | training_tips | lifestyle | community | produc
 
       let part1 = parseJSON(text1);
       let part2 = parseJSON(text2);
-
-      // Ensure week numbers are correct
       if (Array.isArray(part2)) {
         part2 = part2.map(p => ({ ...p, week: p.week < 3 ? p.week + 2 : p.week }));
       }
-
       const data = [...(Array.isArray(part1) ? part1 : []), ...(Array.isArray(part2) ? part2 : [])];
       if (data.length === 0) throw new Error("Plan format invalid — try again");
 
@@ -350,7 +342,6 @@ Return JSON only, no markdown:
 
   async function approvePost(post, approvedPlatforms) {
     try {
-      // Work out which platforms were already approved and which remain
       const allPlatforms = ["instagram", "facebook", "tiktok"];
       const alreadyApproved = (post.approved_platforms || "").split(",").filter(Boolean);
       const newlyApproved = approvedPlatforms.split(",").filter(Boolean);
@@ -358,21 +349,18 @@ Return JSON only, no markdown:
       const remaining = allPlatforms.filter(p => !totalApproved.includes(p));
 
       if (remaining.length === 0) {
-        // All platforms approved — move fully to queue
         if (post.id) await supa.patch("posts", { status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(",") }, `id=eq.${post.id}`);
         setPending(p => p.filter(x => x.id !== post.id && x !== post));
         setPosts(p => [...p.filter(x => x.id !== post.id), { ...post, status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(","), remaining_platforms: "" }]);
         setSelectedPost(null);
         notify(`✓ All platforms approved — moved to Content Queue`);
       } else {
-        // Some platforms still pending — keep in approvals with updated state
         const updatedPost = { ...post, approved_platforms: totalApproved.join(","), remaining_platforms: remaining.join(","), platform: totalApproved.join(",") };
         if (post.id) await supa.patch("posts", { approved_platforms: totalApproved.join(","), remaining_platforms: remaining.join(",") }, `id=eq.${post.id}`);
         setPending(p => p.map(x => (x.id === post.id || x === post) ? updatedPost : x));
         if (selectedPost === post) setSelectedPost(updatedPost);
         notify(`✓ ${newlyApproved.join(", ")} approved · Still pending: ${remaining.join(", ")}`);
       }
-
       log("Social Media Manager", "Platform approved", `${newlyApproved.join(", ")} ✓ · Remaining: ${remaining.join(", ") || "none"}`);
     } catch (e) {
       notify("Error: " + e.message, "err");
@@ -438,6 +426,7 @@ Return JSON only, no markdown:
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={genPlan} disabled={isWorking} style={btn(C.purple)}>{isWorking ? "⏳ Working..." : "◫ Generate Monthly Plan"}</button>
             <button onClick={() => setPage("approval")} disabled={pending.length === 0} style={btn(C.teal)}>✓ Review Approvals{pending.length > 0 ? ` (${pending.length})` : ""}</button>
+            <button onClick={() => setPage("seo")} style={btn("#16a34a")}>🔍 Auto SEO</button>
             <button onClick={() => setPage("settings")} style={btn(C.card, true)}>⚙ Settings</button>
           </div>
         </div>
@@ -509,21 +498,13 @@ Return JSON only, no markdown:
       { id: "facebook",  label: "Facebook",  color: "#1877F2", icon: "📘", handle: "THUGFIT" },
       { id: "tiktok",    label: "TikTok",    color: "#010101", icon: "🎵", handle: "@thugfit.ae" },
     ];
-
     const approvedSoFar = (post?.approved_platforms || "").split(",").filter(Boolean);
     const platforms = allPlatforms.filter(p => !approvedSoFar.includes(p.id));
     const selectedCount = platforms.filter(p => platformApprovals[p.id]).length;
     const allSelected = selectedCount === platforms.length && platforms.length > 0;
 
-    function togglePlatform(pid) {
-      setPlatformApprovals(prev => ({ ...prev, [pid]: !prev[pid] }));
-    }
-    function selectAll() {
-      const val = !allSelected;
-      const next = {};
-      platforms.forEach(p => next[p.id] = val);
-      setPlatformApprovals(next);
-    }
+    function togglePlatform(pid) { setPlatformApprovals(prev => ({ ...prev, [pid]: !prev[pid] })); }
+    function selectAll() { const val = !allSelected; const next = {}; platforms.forEach(p => next[p.id] = val); setPlatformApprovals(next); }
     async function doApprove() {
       const approved = platforms.filter(p => platformApprovals[p.id]).map(p => p.id);
       if (approved.length === 0) { notify("Select at least one platform first", "err"); return; }
@@ -556,7 +537,6 @@ Return JSON only, no markdown:
             ))}
           </div>
         </div>
-
         <div style={{ ...card, marginBottom: 16, padding: "14px 18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
             <div>
@@ -582,7 +562,6 @@ Return JSON only, no markdown:
             </div>
           </div>
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${platforms.length},1fr)`, gap: 16, marginBottom: 16 }}>
           {platforms.map(p => {
             const ticked = !!platformApprovals[p.id];
@@ -616,7 +595,6 @@ Return JSON only, no markdown:
             );
           })}
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div style={card}>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Caption</div>
@@ -668,7 +646,6 @@ Return JSON only, no markdown:
           <div style={{ fontSize: 18, fontWeight: 700 }}>Content Queue</div>
           <div style={{ fontSize: 12, color: C.muted }}>{all.length} post{all.length !== 1 ? "s" : ""} total</div>
         </div>
-
         {all.length === 0
           ? <div style={{ ...card, textAlign: "center", padding: "64px 20px", color: C.muted }}>No content yet. Open the Planner and click ⚡ Generate on any post.</div>
           : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -712,8 +689,6 @@ Return JSON only, no markdown:
                     </button>
                   </div>
                 </div>
-
-                {/* Expanded actions */}
                 {expanded === i && (
                   <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "12px 16px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <div style={{ fontSize: 12, color: C.muted, flex: 1 }}>
@@ -737,7 +712,6 @@ Return JSON only, no markdown:
             ))}
           </div>}
 
-        {/* Schedule Modal */}
         {scheduling && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
             onClick={e => { if (e.target === e.currentTarget) setScheduling(null); }}>
@@ -786,7 +760,7 @@ Return JSON only, no markdown:
           {dowLabels.map(d => <div key={d} style={{ background: C.card, padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{d}</div>)}
           {Array(offset).fill(0).map((_, i) => <div key={`e${i}`} style={{ background: "#080B12", minHeight: 72 }} />)}
           {Array(dim).fill(0).map((_, i) => {
-            const d = i + 1; const isToday = d === 27 && month === 7;
+            const d = i + 1; const isToday = d === 4 && month === 8;
             return (
               <div key={d} style={{ background: C.card, minHeight: 72, padding: "7px 8px", borderTop: isToday ? `2px solid ${C.purple}` : "2px solid transparent" }}>
                 <div style={{ fontSize: 12, color: isToday ? C.purple : C.muted, fontWeight: isToday ? 700 : 400 }}>{d}</div>
@@ -819,7 +793,8 @@ Return JSON only, no markdown:
               <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..."
                 style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13 }} />
               <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>Get free key → aistudio.google.com → Get API key → Create API key</div>
-            </div>            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ padding: "10px 14px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8, fontSize: 12, color: C.teal }}>✓ Claude API connected — content generation active</div>
               <div style={{ padding: "10px 14px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8, fontSize: 12, color: C.teal }}>✓ Supabase connected — ioniqxioapcdgenpksex.supabase.co</div>
               <div style={{ padding: "10px 14px", background: `${geminiKey ? C.teal : C.amber}10`, border: `1px solid ${geminiKey ? C.teal : C.amber}30`, borderRadius: 8, fontSize: 12, color: geminiKey ? C.teal : C.amber }}>
@@ -862,10 +837,8 @@ ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS chat_messages (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  chat_id text NOT NULL,
-  role text NOT NULL,
-  content text NOT NULL,
-  agent_id text,
+  chat_id text NOT NULL, role text NOT NULL,
+  content text NOT NULL, agent_id text,
   created_at timestamptz DEFAULT now()
 );
 
@@ -878,11 +851,8 @@ CREATE TABLE IF NOT EXISTS agent_skills (
 
 CREATE TABLE IF NOT EXISTS change_log (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  agent_id text,
-  change_type text,
-  description text,
-  requested_by text,
-  chat_id text,
+  agent_id text, change_type text, description text,
+  requested_by text, chat_id text,
   created_at timestamptz DEFAULT now()
 );
 
@@ -891,11 +861,37 @@ ALTER TABLE agent_skills DISABLE ROW LEVEL SECURITY;
 ALTER TABLE change_log DISABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS app_settings (
-  key text PRIMARY KEY,
-  value text,
+  key text PRIMARY KEY, value text,
   updated_at timestamptz DEFAULT now()
 );
-ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;`}
+ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;
+
+-- SEO Automation tables
+CREATE TABLE IF NOT EXISTS seo_automation (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  is_enabled boolean DEFAULT false,
+  wp_url text DEFAULT 'https://thugfit.ae',
+  wp_username text, wp_app_password text,
+  post_status text DEFAULT 'draft',
+  last_run timestamptz
+);
+CREATE TABLE IF NOT EXISTS seo_activity_log (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  action text, title text, keyword text,
+  status text, wp_post_id int, wp_post_url text, error text
+);
+CREATE TABLE IF NOT EXISTS seo_keyword_queue (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  keyword text, used boolean DEFAULT false,
+  used_at timestamptz, priority int DEFAULT 5
+);
+ALTER TABLE seo_automation DISABLE ROW LEVEL SECURITY;
+ALTER TABLE seo_activity_log DISABLE ROW LEVEL SECURITY;
+ALTER TABLE seo_keyword_queue DISABLE ROW LEVEL SECURITY;
+INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
             </pre>
           </div>
         </div>
@@ -947,14 +943,15 @@ ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;`}
             </div>
           )}
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: page === "seo" ? 0 : 24 }}>
           {page === "dashboard" && <Dashboard />}
           {page === "planner"   && <Planner />}
           {page === "approval"  && <Approval />}
           {page === "queue"     && <Queue />}
           {page === "calendar"  && <Calendar />}
+          {page === "seo"       && <SEO />}
           {page === "settings"  && <Settings />}
-          {page === "chat"     && <Chat brandVoice={brandVoice} />}
+          {page === "chat"      && <Chat brandVoice={brandVoice} />}
         </div>
       </div>
 
