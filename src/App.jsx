@@ -526,7 +526,10 @@ const ALL_TASK_DEFINITIONS = [
 
 function StaffTaskManager({ platformUser }) {
   const isAdminUser2 = ADMIN_EMAILS.includes(platformUser?.email || "");
-  const user = { name: (platformUser?.email || "").split("@")[0].charAt(0).toUpperCase() + (platformUser?.email || "").split("@")[0].slice(1), email: platformUser?.email || "", role: isAdminUser2 ? "admin" : "staff" };
+  const userEmail = platformUser?.email || "";
+  const userName = userEmail.split("@")[0].charAt(0).toUpperCase() + userEmail.split("@")[0].slice(1);
+  const userRole = isAdminUser2 ? "admin" : "staff";
+  const user = { name: userName, email: userEmail, role: userRole };
   const [loggedIn,   setLoggedIn]   = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass,  setLoginPass]  = useState("");
@@ -599,7 +602,7 @@ function StaffTaskManager({ platformUser }) {
       setReportDays(days);
       const all = await taskFetch(`/rest/v1/staff_task_log?due_date=gte.${days[0]}&order=due_date.asc,assigned_to.asc`);
       setReportData(Array.isArray(all) ? all : []);
-    } catch(e) { showToast("Error loading report"); }
+    } catch(e) { showToast("Error: " + e.message); console.error(e); }
     finally { setLoading(false); }
   };
 
@@ -607,7 +610,7 @@ function StaffTaskManager({ platformUser }) {
     if (!loggedIn || !user) return;
     if (view === "today") loadTodayTasks();
     else loadReport();
-  }, [loggedIn, user, view]);
+  }, [loggedIn, userEmail, userRole, view]);
 
   const completeTask = async (task) => {
     setCompleting(p => ({...p, [task.id]: true}));
