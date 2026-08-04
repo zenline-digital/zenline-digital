@@ -403,351 +403,391 @@ Additional requirements:
 const TASK_SB_URL = "https://ioniqxioapcdgenpksex.supabase.co";
 const TASK_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbmlxeGlvYXBjZGdlbnBrc2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc1MDIsImV4cCI6MjEwMDcyMzUwMn0.PS80PFMqBYMf0e6uiYvTFk90gF7a7jo97C-dzzxUGho";
 
+const STAFF_ACCOUNTS = [
+  { email: "midhun@thugfit.ae",   password: "thugfit2026", name: "Midhun",  role: "admin"  },
+  { email: "hello@thugfit.ae",    password: "staff2026",   name: "Staff",   role: "staff"  },
+  { email: "staff1@thugfit.ae",   password: "staff2026",   name: "Staff 1", role: "staff"  },
+  { email: "staff2@thugfit.ae",   password: "staff2026",   name: "Staff 2", role: "staff"  },
+];
+
 async function taskFetch(path, method="GET", body=null) {
-  const h = {"Content-Type":"application/json",apikey:TASK_SB_KEY,Authorization:`Bearer ${TASK_SB_KEY}`,Prefer:"return=representation"};
-  const r = await fetch(`${TASK_SB_URL}${path}`,{method,headers:h,body:body?JSON.stringify(body):undefined});
-  return r.status===204?null:r.json().catch(()=>null);
+  const h = {"Content-Type":"application/json", apikey:TASK_SB_KEY, Authorization:`Bearer ${TASK_SB_KEY}`, Prefer:"return=representation"};
+  const r = await fetch(`${TASK_SB_URL}${path}`, {method, headers:h, body:body?JSON.stringify(body):undefined});
+  return r.status===204 ? null : r.json().catch(()=>null);
 }
 
-const CAT_COLORS = {content:"#8B7CF8",social:"#F472B6",admin:"#FBBF24",seo:"#00C9A7",marketing:"#60A5FA"};
-const CAT_ICONS  = {content:"📝",social:"📱",admin:"⚙️",seo:"🔍",marketing:"📧"};
+const CAT_COLORS = {content:"#8B7CF8", social:"#F472B6", admin:"#FBBF24", seo:"#00C9A7", marketing:"#60A5FA"};
+const CAT_ICONS  = {content:"📝", social:"📱", admin:"⚙️", seo:"🔍", marketing:"📧"};
+
+// All tasks a staff member needs to know about — with full instructions
+const ALL_TASK_DEFINITIONS = [
+  // DAILY TASKS
+  { name:"Review AI-generated posts", cat:"content", freq:"daily", priority:1,
+    instructions:"Open ZenLine Digital → Approvals tab → review each post waiting → tick platforms you approve → click Approve. If post quality is poor, click Reject and go to Planner to regenerate." },
+  { name:"Check Instagram comments & DMs", cat:"social", freq:"daily", priority:2,
+    instructions:"Open Instagram → @thugfit.ae → reply to ALL comments within 2 hours. Check DMs and reply to any customer questions. If someone asks about orders, direct them to thugfit.ae or WhatsApp Midhun." },
+  { name:"Check Facebook comments & messages", cat:"social", freq:"daily", priority:3,
+    instructions:"Open Facebook → THUGFIT page → reply to all comments and messages. Same approach as Instagram — be helpful, professional, on-brand." },
+  { name:"Check thugfit.ae orders", cat:"admin", freq:"daily", priority:4,
+    instructions:"Go to thugfit.ae/wp-admin → WooCommerce → Orders → filter by Today. Check for any new orders, failed payments, or customer notes. Flag anything unusual to Midhun via WhatsApp." },
+  { name:"Check Train & Earn applications", cat:"admin", freq:"daily", priority:5,
+    instructions:"Go to thugfit.ae/wp-admin → check for new Train & Earn member applications pending approval. Review the application details. If applicant looks genuine, notify Midhun to approve. Do NOT approve yourself without Midhun confirmation." },
+  { name:"Post to Google Business Profile", cat:"marketing", freq:"daily", priority:6,
+    instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Google Business Profile → Option B tab → select a topic → click Generate Post → copy the text → go to business.google.com → Posts → Create post → paste text → add a product photo if available → click Post." },
+
+  // WEEKLY TASKS (Monday)
+  { name:"Send Train & Earn outreach emails", cat:"marketing", freq:"weekly_mon", priority:10,
+    instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Backlink Outreach Emails → select target type (UAE Fitness Blog / Dubai Gym / Influencer) → click Generate 3 Emails → copy each email → find the target website or Instagram DM → send the email. Do this for at least 3 different targets every Monday." },
+  { name:"Review Google Search Console", cat:"seo", freq:"weekly_mon", priority:11,
+    instructions:"Go to search.google.com/search-console → select thugfit.ae → note: Total clicks this week, Total impressions, Top 5 search queries. Open ZenLine Digital → Auto SEO → SEO Tasks → Google Search Console Advisor → paste the numbers → click Generate Actions → follow the 5 action items listed." },
+  { name:"Check broken links and 404 errors", cat:"seo", freq:"weekly_mon", priority:12,
+    instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Broken Link Checker → click Scan. If broken links are found, go to thugfit.ae/wp-admin → Posts → find the post mentioned → edit it → remove or update the broken link → Update. Also check Staff Tasks panel for any 404 errors flagged by the system." },
+  { name:"Schedule next week content", cat:"content", freq:"weekly_fri", priority:13,
+    instructions:"Open ZenLine Digital → Content Queue → find all posts with status Approved → click Schedule on each → pick the date and time for next week (spread across Mon-Fri, post between 7-9 AM or 6-9 PM UAE time for best engagement) → Confirm Schedule." },
+
+  // MONTHLY TASKS (1st of month)
+  { name:"Run Product SEO Scanner", cat:"seo", freq:"monthly", priority:20,
+    instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Product Page SEO Scanner → click Scan Products → wait for AI to generate SEO titles and meta descriptions for all products → review the suggestions → click Apply All to update all products at once in WordPress." },
+  { name:"Run Page Speed Check", cat:"seo", freq:"monthly", priority:21,
+    instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Page Speed Checker → click Check Speed Now → note the mobile and desktop scores → read the 5 fix steps → action each fix in WordPress (the instructions are step-by-step, non-technical). Report scores to Midhun." },
+  { name:"Generate monthly content plan", cat:"content", freq:"monthly", priority:22,
+    instructions:"Open ZenLine Digital → Dashboard → click Generate Monthly Plan button → wait 30-60 seconds for AI to create the full month plan → go to Monthly Planner → review all 20 posts across 4 weeks → start generating content by clicking ⚡ Generate on each post." },
+];
 
 function StaffTaskManager() {
-  const [staffName,  setStaffName]  = useState(localStorage.getItem("zt_staff_name")  || "");
-  const [staffEmail, setStaffEmail] = useState(localStorage.getItem("zt_staff_email") || "");
-  const [setupName,  setSetupName]  = useState("");
-  const [setupEmail, setSetupEmail] = useState("");
+  const [loggedIn,   setLoggedIn]   = useState(!!localStorage.getItem("zt_staff_email"));
+  const [user,       setUser]       = useState(JSON.parse(localStorage.getItem("zt_staff_user") || "null"));
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPass,  setLoginPass]  = useState("");
+  const [loginError, setLoginError] = useState("");
   const [view,       setView]       = useState("today");
   const [todayTasks, setTodayTasks] = useState([]);
   const [reportData, setReportData] = useState([]);
+  const [reportDays, setReportDays] = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [completing, setCompleting] = useState({});
-  const [note,       setNote]       = useState({});
+  const [notes,      setNotes]      = useState({});
+  const [expanded,   setExpanded]   = useState(null);
   const [toast,      setToast]      = useState("");
-  const [reportDays, setReportDays] = useState([]);
-  const [addingTask, setAddingTask] = useState(false);
-  const [newTask,    setNewTask]    = useState({name:"",desc:"",cat:"admin",freq:"daily",dow:"",assigned:""});
 
   const today = new Date().toISOString().split("T")[0];
-  const isAdmin = staffEmail === "midhun@zenstitches.com" || staffEmail === "midhun@thugfit.ae" || staffName.toLowerCase() === "midhun";
-  const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),3000); };
+  const dow = new Date().getDay(); // 0=Sun,1=Mon,...5=Fri,6=Sat
+  const dom = new Date().getDate();
+  const isAdmin = user?.role === "admin";
+  const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),3500); };
 
-  const saveProfile = () => {
-    if(!setupName.trim()||!setupEmail.trim()){showToast("Enter your name and email");return;}
-    localStorage.setItem("zt_staff_name",  setupName.trim());
-    localStorage.setItem("zt_staff_email", setupEmail.trim());
-    setStaffName(setupName.trim());
-    setStaffEmail(setupEmail.trim());
+  const doLogin = () => {
+    const acct = STAFF_ACCOUNTS.find(a => a.email===loginEmail.trim().toLowerCase() && a.password===loginPass);
+    if (!acct) { setLoginError("Incorrect email or password. Contact Midhun if you need access."); return; }
+    localStorage.setItem("zt_staff_email", acct.email);
+    localStorage.setItem("zt_staff_user", JSON.stringify(acct));
+    setUser(acct); setLoggedIn(true); setLoginError("");
+  };
+
+  const doLogout = () => {
+    localStorage.removeItem("zt_staff_email");
+    localStorage.removeItem("zt_staff_user");
+    setUser(null); setLoggedIn(false); setTodayTasks([]); setReportData([]);
+  };
+
+  // Determine which tasks apply today
+  const getApplicableTasks = () => {
+    return ALL_TASK_DEFINITIONS.filter(t => {
+      if (t.freq === "daily") return true;
+      if (t.freq === "weekly_mon") return dow === 1;
+      if (t.freq === "weekly_fri") return dow === 5;
+      if (t.freq === "monthly") return dom === 1;
+      return false;
+    });
   };
 
   const loadTodayTasks = async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      // Get templates
-      const tmpl = await taskFetch("/rest/v1/staff_task_templates?active=eq.true&order=sort_order.asc");
-      const templates = Array.isArray(tmpl) ? tmpl : [];
-      const dow = new Date().getDay(); // 0=Sun,1=Mon,...6=Sat
-      const dom = new Date().getDate();
-
-      // Determine which templates apply today
-      const applicable = templates.filter(t => {
-        if(t.frequency==="daily") return true;
-        if(t.frequency==="weekly") return t.day_of_week===dow;
-        if(t.frequency==="monthly") return dom===1;
-        return false;
-      });
-
-      // Check if today's tasks already generated for this staff
-      const existing = await taskFetch(`/rest/v1/staff_task_log?due_date=eq.${today}&assigned_to=eq.${encodeURIComponent(staffName)}&order=created_at.asc`);
-      const existingNames = (Array.isArray(existing)?existing:[]).map(t=>t.task_name);
-
-      // Generate missing tasks
-      const toCreate = applicable.filter(t=>!existingNames.includes(t.task_name));
-      if(toCreate.length>0) {
-        await Promise.all(toCreate.map(t=>taskFetch("/rest/v1/staff_task_log","POST",{
-          task_name:t.task_name, description:t.description, category:t.category,
-          frequency:t.frequency, assigned_to:staffName, due_date:today, status:"pending"
+      const applicable = getApplicableTasks();
+      // Check what's already logged for today for this user
+      const existing = await taskFetch(`/rest/v1/staff_task_log?due_date=eq.${today}&assigned_to=eq.${encodeURIComponent(user.name)}&order=created_at.asc`);
+      const existingNames = (Array.isArray(existing) ? existing : []).map(t => t.task_name);
+      // Create missing task records
+      const toCreate = applicable.filter(t => !existingNames.includes(t.name));
+      if (toCreate.length > 0) {
+        await Promise.all(toCreate.map(t => taskFetch("/rest/v1/staff_task_log", "POST", {
+          task_name: t.name, description: t.instructions, category: t.cat,
+          frequency: t.freq, assigned_to: user.name, due_date: today, status: "pending"
         })));
       }
-
       // Load final list
-      const final = await taskFetch(`/rest/v1/staff_task_log?due_date=eq.${today}&assigned_to=eq.${encodeURIComponent(staffName)}&order=created_at.asc`);
-      setTodayTasks(Array.isArray(final)?final:[]);
-    } catch(e){showToast("Error loading tasks");}
-    finally{setLoading(false);}
+      const final = await taskFetch(`/rest/v1/staff_task_log?due_date=eq.${today}&assigned_to=eq.${encodeURIComponent(user.name)}&order=created_at.asc`);
+      // Merge with definitions to get instructions if DB doesn't have them
+      const merged = (Array.isArray(final) ? final : []).map(t => {
+        const def = ALL_TASK_DEFINITIONS.find(d => d.name === t.task_name);
+        return { ...t, instructions: t.description || def?.instructions || "" };
+      });
+      setTodayTasks(merged);
+    } catch(e) { showToast("Error loading tasks"); }
+    finally { setLoading(false); }
   };
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      // Last 7 days
-      const days = Array.from({length:7},(_,i)=>{
-        const d=new Date(); d.setDate(d.getDate()-i);
+      const days = Array.from({length:7}, (_,i) => {
+        const d = new Date(); d.setDate(d.getDate()-i);
         return d.toISOString().split("T")[0];
       }).reverse();
       setReportDays(days);
-      const from = days[0];
-      const all = await taskFetch(`/rest/v1/staff_task_log?due_date=gte.${from}&order=due_date.asc,assigned_to.asc`);
-      setReportData(Array.isArray(all)?all:[]);
-    } catch(e){showToast("Error loading report");}
-    finally{setLoading(false);}
+      const all = await taskFetch(`/rest/v1/staff_task_log?due_date=gte.${days[0]}&order=due_date.asc,assigned_to.asc`);
+      setReportData(Array.isArray(all) ? all : []);
+    } catch(e) { showToast("Error loading report"); }
+    finally { setLoading(false); }
   };
 
-  useEffect(()=>{
-    if(!staffName) return;
-    if(view==="today") loadTodayTasks();
+  useEffect(() => {
+    if (!loggedIn || !user) return;
+    if (view === "today") loadTodayTasks();
     else loadReport();
-  },[staffName,view]);
+  }, [loggedIn, user, view]);
 
   const completeTask = async (task) => {
-    setCompleting(p=>({...p,[task.id]:true}));
+    setCompleting(p => ({...p, [task.id]: true}));
     try {
-      await taskFetch(`/rest/v1/staff_task_log?id=eq.${task.id}`,"PATCH",{
-        status:"done", completed_at:new Date().toISOString(),
-        completed_by:staffName, note:note[task.id]||""
+      await taskFetch(`/rest/v1/staff_task_log?id=eq.${task.id}`, "PATCH", {
+        status: "done", completed_at: new Date().toISOString(),
+        completed_by: user.name, note: notes[task.id] || ""
       });
-      setTodayTasks(p=>p.map(t=>t.id===task.id?{...t,status:"done",completed_at:new Date().toISOString()}:t));
+      setTodayTasks(p => p.map(t => t.id===task.id ? {...t, status:"done", completed_at:new Date().toISOString()} : t));
       showToast("✅ Task marked as done");
-    } catch(e){showToast("❌ "+e.message);}
-    finally{setCompleting(p=>({...p,[task.id]:false}));}
+    } catch(e) { showToast("❌ " + e.message); }
+    finally { setCompleting(p => ({...p, [task.id]: false})); }
   };
 
-  const addCustomTask = async () => {
-    if(!newTask.name.trim()){showToast("Enter a task name");return;}
-    try {
-      await taskFetch("/rest/v1/staff_task_templates","POST",{
-        task_name:newTask.name, description:newTask.desc, category:newTask.cat,
-        frequency:newTask.freq, day_of_week:newTask.dow?parseInt(newTask.dow):null,
-        assigned_role:newTask.assigned||"all", active:true, sort_order:99
-      });
-      setAddingTask(false);
-      setNewTask({name:"",desc:"",cat:"admin",freq:"daily",dow:"",assigned:""});
-      showToast("✅ Task template added");
-    } catch(e){showToast("❌ "+e.message);}
+  const done  = todayTasks.filter(t => t.status==="done").length;
+  const total = todayTasks.length;
+  const pct   = total > 0 ? Math.round((done/total)*100) : 0;
+  const staffList = [...new Set(reportData.map(t => t.assigned_to))].sort();
+
+  const getTasksForStaffDay = (staff, day) => reportData.filter(t => t.assigned_to===staff && t.due_date===day);
+  const getDayStatus = tasks => {
+    if (!tasks.length) return null;
+    const doneCount = tasks.filter(t => t.status==="done").length;
+    if (doneCount === tasks.length) return "done";
+    if (doneCount === 0) return "none";
+    return "partial";
   };
 
-  // Report helpers
-  const staffList = [...new Set(reportData.map(t=>t.assigned_to))].sort();
-  const getTasksForStaffAndDay = (staff,day) => reportData.filter(t=>t.assigned_to===staff&&t.due_date===day);
-  const getStatusColor = (tasks) => {
-    if(tasks.length===0) return "#1e1e30";
-    const done=tasks.filter(t=>t.status==="done").length;
-    if(done===tasks.length) return "#16a34a";
-    if(done===0) return "#ef4444";
-    return "#f59e0b";
-  };
-  const getStatusLabel = (tasks) => {
-    if(tasks.length===0) return "—";
-    const done=tasks.filter(t=>t.status==="done").length;
-    return `${done}/${tasks.length}`;
+  const s = {
+    border: "1px solid #1e1e30",
+    card: { background:"#13131f", border:"1px solid #1e1e30", borderRadius:10, padding:16 },
+    input: { width:"100%", background:"#0d0d16", border:"1px solid #1e1e30", color:"#e2e8f0", padding:"10px 14px", borderRadius:8, fontSize:13, outline:"none", fontFamily:"inherit" },
+    label: { fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.06em", display:"block", marginBottom:6 },
+    btn: (bg, col="#fff") => ({ padding:"10px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:700, fontFamily:"inherit", background:bg, color:col }),
   };
 
-  const done   = todayTasks.filter(t=>t.status==="done").length;
-  const total  = todayTasks.length;
-  const pct    = total>0?Math.round((done/total)*100):0;
-
-  const sBorder = "1px solid #1e1e30";
-  const sCard   = {background:"#13131f",border:sBorder,borderRadius:10,padding:16,marginBottom:12};
-  const sLabel  = {fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:6};
-  const sInput  = {width:"100%",background:"#0d0d16",border:sBorder,color:"#e2e8f0",padding:"8px 12px",borderRadius:8,fontSize:13,outline:"none",fontFamily:"inherit"};
-  const sBtn    = (bg,col="#fff")=>({padding:"9px 18px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"inherit",background:bg,color:col});
-
-  if(!staffName) return (
-    <div style={{minHeight:"100vh",background:"#0d0d16",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',system-ui,sans-serif"}}>
-      <div style={{background:"#13131f",border:sBorder,borderRadius:16,padding:36,width:400,textAlign:"center"}}>
-        <div style={{fontSize:40,marginBottom:16}}>✅</div>
-        <div style={{fontWeight:800,fontSize:20,marginBottom:8,color:"#e2e8f0"}}>Staff Task Manager</div>
-        <div style={{fontSize:13,color:"#64748b",marginBottom:24}}>Enter your name and email to see your daily tasks</div>
-        <div style={{marginBottom:12}}><label style={sLabel}>Your Name</label><input value={setupName} onChange={e=>setSetupName(e.target.value)} placeholder="e.g. Sarah" style={sInput}/></div>
-        <div style={{marginBottom:20}}><label style={sLabel}>Your Email</label><input value={setupEmail} onChange={e=>setSetupEmail(e.target.value)} placeholder="sarah@thugfit.ae" style={sInput}/></div>
-        <button onClick={saveProfile} style={{...sBtn("linear-gradient(135deg,#7c3aed,#2563eb)"),width:"100%"}}>Start Working →</button>
+  // LOGIN SCREEN
+  if (!loggedIn) return (
+    <div style={{minHeight:"100vh", background:"#07091A", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter',system-ui,sans-serif"}}>
+      <div style={{background:"#0D1117", border:"1px solid #1C2537", borderRadius:16, padding:40, width:420, boxShadow:"0 24px 64px #00000060"}}>
+        <div style={{textAlign:"center", marginBottom:28}}>
+          <div style={{fontSize:36, marginBottom:10}}>✅</div>
+          <div style={{fontWeight:800, fontSize:22, color:"#E2E8F7", letterSpacing:"-0.4px"}}>Staff Tasks</div>
+          <div style={{fontSize:13, color:"#6B7EB8", marginTop:6}}>ZenLine Digital — THUGFIT</div>
+        </div>
+        {loginError && <div style={{background:"#f8717120", border:"1px solid #f8717140", borderRadius:8, padding:"10px 14px", fontSize:12, color:"#f87171", marginBottom:16}}>{loginError}</div>}
+        <div style={{marginBottom:14}}>
+          <label style={s.label}>Email Address</label>
+          <input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} placeholder="your@thugfit.ae" style={s.input} onKeyDown={e=>e.key==="Enter"&&doLogin()} />
+        </div>
+        <div style={{marginBottom:22}}>
+          <label style={s.label}>Password</label>
+          <input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} placeholder="••••••••" style={s.input} onKeyDown={e=>e.key==="Enter"&&doLogin()} />
+        </div>
+        <button onClick={doLogin} style={{...s.btn("linear-gradient(135deg,#8B7CF8,#2563eb)"), width:"100%", padding:"12px 0", fontSize:14}}>Sign In →</button>
+        <div style={{fontSize:11, color:"#2D3F5A", textAlign:"center", marginTop:16}}>Contact Midhun if you need login credentials</div>
       </div>
     </div>
   );
 
+  // MAIN TASK VIEW
   return (
-    <div style={{minHeight:"100vh",background:"#0d0d16",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif"}}>
-      <style>{`*{box-sizing:border-box;} input::placeholder,textarea::placeholder{color:#3a3a5c;} select option{background:#0d0d16;}`}</style>
-      {toast&&<div style={{position:"fixed",top:20,right:20,zIndex:999,background:"#13131f",border:sBorder,borderRadius:10,padding:"12px 18px",fontSize:13,color:"#e2e8f0",boxShadow:"0 8px 32px #00000060"}}>{toast}</div>}
+    <div style={{minHeight:"100vh", background:"#07091A", color:"#E2E8F7", fontFamily:"'Inter',system-ui,sans-serif"}}>
+      <style>{`*{box-sizing:border-box} input::placeholder{color:#3a3a5c} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      {toast && <div style={{position:"fixed",top:20,right:20,zIndex:999,background:"#13131f",border:"1px solid #1e1e30",borderRadius:10,padding:"12px 18px",fontSize:13,color:"#e2e8f0",boxShadow:"0 8px 32px #00000060",maxWidth:360}}>{toast}</div>}
 
       {/* Header */}
-      <div style={{background:"#09090f",borderBottom:sBorder,padding:"16px 28px",display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:40,height:40,background:"linear-gradient(135deg,#7c3aed,#2563eb)",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>✅</div>
+      <div style={{background:"#0D1117", borderBottom:"1px solid #1C2537", padding:"16px 28px", display:"flex", alignItems:"center", gap:14}}>
+        <div style={{width:40, height:40, background:"linear-gradient(135deg,#8B7CF8,#2563eb)", borderRadius:11, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20}}>✅</div>
         <div>
-          <div style={{fontWeight:800,fontSize:18}}>Staff Tasks</div>
-          <div style={{fontSize:11,color:"#3a3a5c"}}>Logged in as {staffName} · <span style={{cursor:"pointer",color:"#7c3aed"}} onClick={()=>{localStorage.removeItem("zt_staff_name");localStorage.removeItem("zt_staff_email");setStaffName("");setStaffEmail("");}}>Switch</span></div>
+          <div style={{fontWeight:800, fontSize:18}}>Staff Tasks</div>
+          <div style={{fontSize:11, color:"#3a3a5c"}}>Logged in as <strong style={{color:"#8B7CF8"}}>{user?.name}</strong> · {user?.role === "admin" ? "Admin" : "Staff"}</div>
         </div>
-        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-          <button onClick={()=>setView("today")} style={{...sBtn(view==="today"?"#7c3aed":"#1e1e30"),padding:"7px 16px"}}>📋 My Tasks</button>
-          {isAdmin&&<button onClick={()=>setView("report")} style={{...sBtn(view==="report"?"#7c3aed":"#1e1e30"),padding:"7px 16px"}}>📊 Team Report</button>}
-          {isAdmin&&<button onClick={()=>setAddingTask(!addingTask)} style={{...sBtn("#1e1e30"),padding:"7px 16px"}}>+ Add Task</button>}
+        <div style={{marginLeft:"auto", display:"flex", gap:8}}>
+          <button onClick={()=>setView("today")} style={{...s.btn(view==="today"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📋 My Tasks</button>
+          {isAdmin && <button onClick={()=>setView("report")} style={{...s.btn(view==="report"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📊 Team Report</button>}
+          <button onClick={doLogout} style={{...s.btn("#131929","#6B7EB8"), padding:"7px 14px", fontSize:12}}>Sign Out</button>
         </div>
       </div>
 
-      <div style={{padding:"24px 28px",maxWidth:1000,margin:"0 auto"}}>
+      <div style={{padding:"24px 28px", maxWidth:900, margin:"0 auto"}}>
 
-        {/* Add Task Panel */}
-        {addingTask&&isAdmin&&(
-          <div style={{...sCard,marginBottom:20,background:"#0d1117",border:"1px solid #7c3aed40"}}>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:"#a78bfa"}}>+ Add Task Template</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-              <div><label style={sLabel}>Task Name</label><input value={newTask.name} onChange={e=>setNewTask(p=>({...p,name:e.target.value}))} placeholder="e.g. Check TikTok comments" style={sInput}/></div>
-              <div><label style={sLabel}>Category</label>
-                <select value={newTask.cat} onChange={e=>setNewTask(p=>({...p,cat:e.target.value}))} style={sInput}>
-                  <option value="daily">Social</option><option value="content">Content</option><option value="admin">Admin</option><option value="seo">SEO</option><option value="marketing">Marketing</option>
-                </select>
-              </div>
-            </div>
-            <div style={{marginBottom:12}}><label style={sLabel}>Instructions for staff</label><input value={newTask.desc} onChange={e=>setNewTask(p=>({...p,desc:e.target.value}))} placeholder="Step by step what to do" style={sInput}/></div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-              <div><label style={sLabel}>Frequency</label>
-                <select value={newTask.freq} onChange={e=>setNewTask(p=>({...p,freq:e.target.value}))} style={sInput}>
-                  <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly (1st)</option>
-                </select>
-              </div>
-              {newTask.freq==="weekly"&&<div><label style={sLabel}>Day of Week</label>
-                <select value={newTask.dow} onChange={e=>setNewTask(p=>({...p,dow:e.target.value}))} style={sInput}>
-                  <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
-                </select>
-              </div>}
-            </div>
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={addCustomTask} style={sBtn("linear-gradient(135deg,#7c3aed,#2563eb)")}>Save Task Template</button>
-              <button onClick={()=>setAddingTask(false)} style={sBtn("#1e1e30")}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {/* MY TASKS TODAY */}
-        {view==="today"&&(
+        {/* TODAY'S TASKS */}
+        {view==="today" && (
           <>
-            {/* Progress bar */}
-            <div style={{...sCard,marginBottom:20}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{fontWeight:700,fontSize:15}}>Today — {new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
-                <div style={{fontWeight:800,fontSize:22,color:pct===100?"#4ade80":pct>50?"#fb923c":"#f87171"}}>{pct}%</div>
+            {/* Progress */}
+            <div style={{...s.card, marginBottom:20}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+                <div>
+                  <div style={{fontWeight:700, fontSize:15}}>
+                    {new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}
+                  </div>
+                  <div style={{fontSize:12, color:"#6B7EB8", marginTop:2}}>{done} of {total} tasks completed</div>
+                </div>
+                <div style={{fontWeight:900, fontSize:28, color:pct===100?"#4ade80":pct>60?"#fb923c":"#f87171"}}>{pct}%</div>
               </div>
-              <div style={{background:"#0d0d16",borderRadius:20,height:10,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${pct}%`,background:pct===100?"#16a34a":"linear-gradient(90deg,#7c3aed,#2563eb)",borderRadius:20,transition:"width .5s"}}/>
+              <div style={{background:"#07091A", borderRadius:20, height:10, overflow:"hidden"}}>
+                <div style={{height:"100%", width:`${pct}%`, background:pct===100?"#16a34a":"linear-gradient(90deg,#8B7CF8,#2563eb)", borderRadius:20, transition:"width .5s"}} />
               </div>
-              <div style={{fontSize:12,color:"#64748b",marginTop:8}}>{done}/{total} tasks completed today</div>
+              {pct===100 && <div style={{fontSize:12, color:"#4ade80", marginTop:10, textAlign:"center"}}>🎉 All tasks done for today. Great work!</div>}
             </div>
 
-            {loading?<div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading tasks...</div>
-            :todayTasks.length===0?<div style={{...sCard,textAlign:"center",padding:40,color:"#64748b"}}>No tasks for today. Check back Monday for weekly tasks.</div>
-            :(
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {todayTasks.map(task=>(
-                  <div key={task.id} style={{background:"#13131f",border:`1px solid ${task.status==="done"?"#16a34a40":"#1e1e30"}`,borderRadius:10,padding:16,opacity:task.status==="done"?0.7:1,transition:"all .2s"}}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                      <div style={{width:36,height:36,borderRadius:9,background:`${CAT_COLORS[task.category]||"#7c3aed"}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{CAT_ICONS[task.category]||"📋"}</div>
-                      <div style={{flex:1}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                          <span style={{fontWeight:700,fontSize:14,textDecoration:task.status==="done"?"line-through":"none",color:task.status==="done"?"#4a4a6a":"#e2e8f0"}}>{task.task_name}</span>
-                          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:`${CAT_COLORS[task.category]||"#7c3aed"}20`,color:CAT_COLORS[task.category]||"#7c3aed"}}>{task.category}</span>
-                          <span style={{fontSize:10,color:"#3a3a5c"}}>{task.frequency}</span>
+            {loading ? <div style={{textAlign:"center", padding:40, color:"#6B7EB8"}}>Loading your tasks...</div>
+            : todayTasks.length === 0 ? <div style={{...s.card, textAlign:"center", padding:40, color:"#6B7EB8"}}>No tasks scheduled for today.</div>
+            : <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                {todayTasks.map((task,i) => {
+                  const isDone = task.status === "done";
+                  const isOpen = expanded === task.id;
+                  return (
+                    <div key={task.id} style={{background:"#0D1117", border:`1px solid ${isDone?"#16a34a40":"#1C2537"}`, borderRadius:12, overflow:"hidden", opacity:isDone?0.75:1, transition:"all .2s"}}>
+                      {/* Task header - always visible */}
+                      <div onClick={()=>setExpanded(isOpen?null:task.id)} style={{display:"flex", alignItems:"center", gap:12, padding:"14px 16px", cursor:"pointer"}}>
+                        <div style={{width:32, height:32, borderRadius:8, background:`${CAT_COLORS[task.category]||"#8B7CF8"}20`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0}}>
+                          {isDone ? "✅" : CAT_ICONS[task.category]||"📋"}
                         </div>
-                        {task.description&&<div style={{fontSize:12,color:"#64748b",lineHeight:1.6,marginBottom:8}}>{task.description}</div>}
-                        {task.status==="done"&&<div style={{fontSize:11,color:"#4ade80"}}>✓ Done at {new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}</div>}
-                        {task.status!=="done"&&(
-                          <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
-                            <input value={note[task.id]||""} onChange={e=>setNote(p=>({...p,[task.id]:e.target.value}))} placeholder="Add a note (optional)..." style={{...sInput,flex:1,fontSize:11,padding:"6px 10px"}}/>
-                            <button onClick={()=>completeTask(task)} disabled={completing[task.id]} style={{...sBtn("#16a34a"),padding:"6px 16px",fontSize:12,whiteSpace:"nowrap"}}>
-                              {completing[task.id]?"...":"✓ Done"}
-                            </button>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:700, fontSize:14, textDecoration:isDone?"line-through":"none", color:isDone?"#3a3a5c":"#E2E8F7"}}>
+                            {task.task_name}
                           </div>
-                        )}
+                          <div style={{display:"flex", gap:8, marginTop:3, alignItems:"center"}}>
+                            <span style={{fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, background:`${CAT_COLORS[task.category]||"#8B7CF8"}20`, color:CAT_COLORS[task.category]||"#8B7CF8"}}>{task.category}</span>
+                            <span style={{fontSize:10, color:"#3a3a5c"}}>{task.frequency==="daily"?"Daily":task.frequency==="weekly_mon"?"Every Monday":task.frequency==="weekly_fri"?"Every Friday":"Monthly"}</span>
+                            {isDone && <span style={{fontSize:10, color:"#4ade80", fontWeight:700}}>✓ Done {task.completed_at?new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}):""}</span>}
+                          </div>
+                        </div>
+                        <div style={{fontSize:12, color:"#3a3a5c"}}>{isOpen?"▲":"▼"}</div>
                       </div>
+
+                      {/* Expanded - instructions + done button */}
+                      {isOpen && (
+                        <div style={{borderTop:"1px solid #1C2537", padding:"14px 16px", background:"#07091A"}}>
+                          <div style={{fontSize:12, fontWeight:700, color:"#6B7EB8", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em"}}>How to do this:</div>
+                          <div style={{fontSize:13, color:"#94a3b8", lineHeight:1.8, marginBottom:14}}>{task.instructions}</div>
+                          {!isDone && (
+                            <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                              <input value={notes[task.id]||""} onChange={e=>setNotes(p=>({...p,[task.id]:e.target.value}))} placeholder="Add a note (optional)..." style={{...s.input, flex:1, fontSize:12, padding:"8px 12px"}} />
+                              <button onClick={()=>completeTask(task)} disabled={completing[task.id]}
+                                style={{...s.btn("#16a34a"), padding:"8px 18px", fontSize:12, whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6}}>
+                                {completing[task.id]?<div style={{width:14,height:14,border:"2px solid #ffffff40",borderTop:"2px solid #fff",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>:null}
+                                {completing[task.id]?"Saving...":"✓ Mark as Done"}
+                              </button>
+                            </div>
+                          )}
+                          {isDone && task.note && <div style={{fontSize:12, color:"#4ade80"}}>Note: {task.note}</div>}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            )}
+            }
           </>
         )}
 
-        {/* TEAM REPORT */}
-        {view==="report"&&isAdmin&&(
+        {/* TEAM REPORT - Admin only */}
+        {view==="report" && isAdmin && (
           <>
-            <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>Team Performance — Last 7 Days</div>
-            {loading?<div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading report...</div>:(
+            <div style={{fontWeight:700, fontSize:16, marginBottom:6}}>Team Performance — Last 7 Days</div>
+            <div style={{fontSize:12, color:"#6B7EB8", marginBottom:20}}>Green = all done · Yellow = partial · Red = not done · — = no tasks that day</div>
+
+            {loading ? <div style={{textAlign:"center", padding:40, color:"#6B7EB8"}}>Loading...</div> : (
               <>
-                {/* Summary row */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                {/* Stats */}
+                <div style={{display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20}}>
                   {[
-                    ["Total Tasks",reportData.length,"#a78bfa"],
-                    ["Completed",reportData.filter(t=>t.status==="done").length,"#4ade80"],
-                    ["Pending",reportData.filter(t=>t.status==="pending"&&t.due_date===today).length,"#fb923c"],
-                    ["Completion Rate",reportData.length>0?Math.round(reportData.filter(t=>t.status==="done").length/reportData.length*100)+"%":"0%","#60a5fa"],
+                    ["Total Tasks", reportData.length, "#a78bfa"],
+                    ["Completed", reportData.filter(t=>t.status==="done").length, "#4ade80"],
+                    ["Pending Today", reportData.filter(t=>t.due_date===today&&t.status!=="done").length, "#fb923c"],
+                    ["Completion Rate", reportData.length>0?Math.round(reportData.filter(t=>t.status==="done").length/reportData.length*100)+"%":"0%","#60a5fa"],
                   ].map(([l,v,c])=>(
-                    <div key={l} style={{background:"#13131f",border:sBorder,borderRadius:10,padding:"14px 16px"}}>
-                      <div style={{fontWeight:800,fontSize:22,color:c}}>{v}</div>
-                      <div style={{fontSize:11,color:"#4a4a6a",marginTop:4}}>{l}</div>
+                    <div key={l} style={{...s.card}}>
+                      <div style={{fontWeight:800, fontSize:22, color:c}}>{v}</div>
+                      <div style={{fontSize:11, color:"#4a4a6a", marginTop:4}}>{l}</div>
                     </div>
                   ))}
                 </div>
 
-                {/* Grid: staff × days */}
-                {staffList.length===0?<div style={{...sCard,textAlign:"center",padding:30,color:"#64748b"}}>No task data yet. Staff need to log in and complete tasks first.</div>:(
-                  <div style={{background:"#13131f",border:sBorder,borderRadius:12,overflow:"hidden"}}>
-                    <div style={{display:"grid",gridTemplateColumns:`180px repeat(${reportDays.length},1fr)`,background:"#09090f",borderBottom:sBorder}}>
-                      <div style={{padding:"10px 14px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Staff Member</div>
-                      {reportDays.map(d=>{
-                        const dt=new Date(d+"T00:00:00");
-                        const isToday=d===today;
-                        return <div key={d} style={{padding:"10px 8px",fontSize:11,fontWeight:700,color:isToday?"#a78bfa":"#64748b",textAlign:"center",borderLeft:sBorder,background:isToday?"#7c3aed10":"transparent"}}>
-                          <div>{dt.toLocaleDateString("en-GB",{weekday:"short"})}</div>
-                          <div style={{fontSize:10,color:"#3a3a5c"}}>{dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</div>
-                        </div>;
-                      })}
-                    </div>
-                    {staffList.map(staff=>(
-                      <div key={staff} style={{display:"grid",gridTemplateColumns:`180px repeat(${reportDays.length},1fr)`,borderBottom:sBorder}}>
-                        <div style={{padding:"12px 14px",fontSize:13,fontWeight:600,color:"#e2e8f0",display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{width:28,height:28,borderRadius:"50%",background:"#7c3aed20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#a78bfa",flexShrink:0}}>{staff[0]?.toUpperCase()}</div>
-                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}}>{staff}</span>
-                        </div>
-                        {reportDays.map(day=>{
-                          const dayTasks=getTasksForStaffAndDay(staff,day);
-                          const bg=getStatusColor(dayTasks);
-                          const lbl=getStatusLabel(dayTasks);
-                          const isPast=day<today;
-                          const allDone=dayTasks.length>0&&dayTasks.every(t=>t.status==="done");
-                          const noneDone=dayTasks.length>0&&dayTasks.every(t=>t.status!=="done");
-                          return (
-                            <div key={day} title={dayTasks.map(t=>`${t.status==="done"?"✓":"✗"} ${t.task_name}`).join(" | ")}
-                              style={{borderLeft:sBorder,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px",background:day===today?"#7c3aed08":"transparent",cursor:dayTasks.length>0?"help":"default"}}>
-                              {dayTasks.length===0?<span style={{fontSize:11,color:"#2a2a40"}}>—</span>:(
-                                <>
-                                  <div style={{width:32,height:32,borderRadius:8,background:allDone?"#16a34a":(isPast&&noneDone)?"#ef4444":"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>
-                                    {allDone?"✓":(isPast&&noneDone)?"✗":"⏳"}
-                                  </div>
-                                  <div style={{fontSize:10,color:"#64748b",marginTop:4}}>{lbl}</div>
-                                </>
-                              )}
-                            </div>
-                          );
+                {/* Grid */}
+                {staffList.length === 0
+                  ? <div style={{...s.card, textAlign:"center", padding:30, color:"#6B7EB8"}}>No task data yet. Staff need to log in and use the system.</div>
+                  : (
+                    <div style={{background:"#0D1117", border:"1px solid #1C2537", borderRadius:12, overflow:"hidden", marginBottom:20}}>
+                      <div style={{display:"grid", gridTemplateColumns:`200px repeat(${reportDays.length},1fr)`, background:"#07091A", borderBottom:"1px solid #1C2537"}}>
+                        <div style={{padding:"10px 14px", fontSize:11, fontWeight:700, color:"#6B7EB8", textTransform:"uppercase"}}>Staff</div>
+                        {reportDays.map(d => {
+                          const dt = new Date(d+"T12:00:00");
+                          return <div key={d} style={{padding:"10px 6px", fontSize:11, fontWeight:700, color:d===today?"#8B7CF8":"#6B7EB8", textAlign:"center", borderLeft:"1px solid #1C2537", background:d===today?"#8B7CF810":"transparent"}}>
+                            <div>{dt.toLocaleDateString("en-GB",{weekday:"short"})}</div>
+                            <div style={{fontSize:9, color:"#3a3a5c"}}>{dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</div>
+                          </div>;
                         })}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {staffList.map(staff => (
+                        <div key={staff} style={{display:"grid", gridTemplateColumns:`200px repeat(${reportDays.length},1fr)`, borderBottom:"1px solid #1C2537"}}>
+                          <div style={{padding:"12px 14px", display:"flex", alignItems:"center", gap:8}}>
+                            <div style={{width:28, height:28, borderRadius:"50%", background:"#8B7CF820", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:"#8B7CF8", flexShrink:0}}>{staff[0]?.toUpperCase()}</div>
+                            <span style={{fontSize:12, fontWeight:600, color:"#E2E8F7"}}>{staff}</span>
+                          </div>
+                          {reportDays.map(day => {
+                            const tasks = getTasksForStaffDay(staff, day);
+                            const status = getDayStatus(tasks);
+                            const doneCount = tasks.filter(t=>t.status==="done").length;
+                            const isPast = day < today;
+                            const bgColor = !status ? "transparent" : status==="done" ? "#16a34a" : (isPast && status==="none") ? "#ef4444" : "#f59e0b";
+                            const icon = !status ? "—" : status==="done" ? "✓" : (isPast && status==="none") ? "✗" : "⏳";
+                            return (
+                              <div key={day} style={{borderLeft:"1px solid #1C2537", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"10px 4px", background:day===today?"#8B7CF808":"transparent"}}>
+                                {!status
+                                  ? <span style={{fontSize:11, color:"#2a2a40"}}>—</span>
+                                  : <>
+                                      <div style={{width:30, height:30, borderRadius:8, background:bgColor, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#fff"}}>{icon}</div>
+                                      <div style={{fontSize:9, color:"#6B7EB8", marginTop:3}}>{doneCount}/{tasks.length}</div>
+                                    </>
+                                }
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                }
 
-                {/* Detailed task breakdown for today */}
-                <div style={{marginTop:20,fontWeight:700,fontSize:14,marginBottom:12}}>Today's Detail</div>
-                {reportData.filter(t=>t.due_date===today).length===0
-                  ?<div style={{...sCard,textAlign:"center",color:"#64748b",fontSize:13}}>No tasks generated for today yet</div>
-                  :reportData.filter(t=>t.due_date===today).map(task=>(
-                    <div key={task.id} style={{...sCard,display:"flex",alignItems:"center",gap:12,padding:"10px 14px"}}>
-                      <div style={{width:24,height:24,borderRadius:6,background:task.status==="done"?"#16a34a":(task.due_date<today&&task.status!=="done")?"#ef4444":"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>
+                {/* Today's detail */}
+                <div style={{fontWeight:700, fontSize:14, marginBottom:12}}>Today — Task Detail</div>
+                {reportData.filter(t=>t.due_date===today).length === 0
+                  ? <div style={{...s.card, color:"#6B7EB8", textAlign:"center", fontSize:13}}>No tasks logged today yet</div>
+                  : reportData.filter(t=>t.due_date===today).map(task => (
+                    <div key={task.id} style={{...s.card, display:"flex", alignItems:"center", gap:12, padding:"10px 14px", marginBottom:8}}>
+                      <div style={{width:24, height:24, borderRadius:6, background:task.status==="done"?"#16a34a":task.due_date<today&&task.status!=="done"?"#ef4444":"#f59e0b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#fff", flexShrink:0}}>
                         {task.status==="done"?"✓":task.due_date<today?"✗":"⏳"}
                       </div>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:600}}>{task.task_name}</div>
-                        <div style={{fontSize:11,color:"#64748b"}}>{task.assigned_to} · {task.category}</div>
+                        <div style={{fontSize:13, fontWeight:600}}>{task.task_name}</div>
+                        <div style={{fontSize:11, color:"#6B7EB8", marginTop:2}}>{task.assigned_to} · {task.category}</div>
                       </div>
-                      <div style={{fontSize:11,color:task.status==="done"?"#4ade80":"#f87171",fontWeight:700}}>
-                        {task.status==="done"?`Done ${task.completed_by?`by ${task.completed_by}`:""} ${task.completed_at?new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}):""}`:task.status.toUpperCase()}
+                      <div style={{fontSize:11, fontWeight:700, color:task.status==="done"?"#4ade80":"#f87171", textAlign:"right"}}>
+                        {task.status==="done"
+                          ? `Done ${task.completed_at?new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}):""}`
+                          : "PENDING"}
                       </div>
                     </div>
                   ))
