@@ -326,10 +326,11 @@ export default async function handler(req, res) {
     return res.status(401).json({error:"Unauthorized"});
 
   // Support both VITE_ and non-VITE_ key names
+  const HARDCODED_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbmlxeGlvYXBjZGdlbnBrc2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc1MDIsImV4cCI6MjEwMDcyMzUwMn0.PS80PFMqBYMf0e6uiYvTFk90gF7a7jo97C-dzzxUGho";
   const supaKey = process.env.SUPABASE_SERVICE_KEY
     || process.env.SUPABASE_ANON_KEY
     || process.env.VITE_SUPABASE_ANON_KEY
-    || "";
+    || HARDCODED_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY||"";
 
   if(!supaKey||!anthropicKey) {
@@ -351,7 +352,7 @@ export default async function handler(req, res) {
 
   try {
     // 1. Load config
-    const configs=await sbGet("/rest/v1/seo_automation?limit=1",supaKey);
+    const configs=await sbGet("/rest/v1/seo_automation?order=created_at.asc&limit=1",supaKey);
     const config=configs[0];
     if(!config) return res.status(200).json({skipped:true,reason:"No config found — set up in ZenLine Digital Auto SEO"});
     if(!config.is_enabled) return res.status(200).json({skipped:true,reason:"Automation is paused"});
@@ -401,7 +402,7 @@ export default async function handler(req, res) {
     });
 
     // 10. Update last_run
-    await sbPatch("/rest/v1/seo_automation?limit=1",{last_run:new Date().toISOString()},supaKey);
+    await sbPatch("/rest/v1/seo_automation?order=created_at.asc&limit=1",{last_run:new Date().toISOString()},supaKey);
 
     // ── WEEKLY (Monday) ───────────────────────────────────────────────────────
     if(dayOfWeek===1) {
