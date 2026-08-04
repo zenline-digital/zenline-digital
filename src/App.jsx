@@ -156,6 +156,53 @@ function timeAgo(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// ─── Staff Tasks Panel ────────────────────────────────────────────────────────
+function StaffTasksPanel({ sbFetch, showToast }) {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sbFetch("/rest/v1/seo_staff_tasks?resolved=eq.false&order=created_at.desc&limit=20")
+      .then(d => { setTasks(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const resolveTask = async (id) => {
+    try {
+      await sbFetch(`/rest/v1/seo_staff_tasks?id=eq.${id}`, "PATCH", { resolved: true, resolved_at: new Date().toISOString() });
+      setTasks(prev => prev.filter(t => t.id !== id));
+      showToast("✅ Task marked as done");
+    } catch (e) { showToast("❌ " + e.message); }
+  };
+
+  const typeColor = { broken_link: "#f87171", "404_error": "#fb923c", duplicate_content: "#fbbf24" };
+  const typeLabel = { broken_link: "🔗 Broken Link", "404_error": "🚫 404 Error", duplicate_content: "📄 Duplicate Content" };
+
+  if (loading || tasks.length === 0) return null;
+
+  return (
+    <div style={{ background: "#1a0a0a", border: "2px solid #f8717150", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div style={{ fontSize: 20 }}>⚠️</div>
+        <div style={{ fontWeight: 800, fontSize: 15, color: "#f87171" }}>Staff Action Required — {tasks.length} issue{tasks.length !== 1 ? "s" : ""}</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {tasks.map(task => (
+          <div key={task.id} style={{ background: "#0d0d16", border: `1px solid ${typeColor[task.type] || "#f87171"}30`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: typeColor[task.type] || "#f87171", marginBottom: 4 }}>{typeLabel[task.type] || task.type}</div>
+              <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.5 }}>{task.description}</div>
+              {task.url && <div style={{ fontSize: 10, color: "#3a3a5c", marginTop: 4, wordBreak: "break-all" }}>{task.url}</div>}
+              <div style={{ fontSize: 10, color: "#3a3a5c", marginTop: 4 }}>Found: {new Date(task.created_at).toLocaleDateString()}</div>
+            </div>
+            <button onClick={() => resolveTask(task.id)} style={{ background: "#16a34a20", border: "1px solid #16a34a40", color: "#4ade80", padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>✓ Done</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SEO() {
   const [activeTab, setActiveTab] = useState("autopilot");
 
@@ -313,18 +360,24 @@ function SEO() {
       const typeLabels = { uae_fitness_blog: "UAE fitness and wellness blog", gym_dubai: "Dubai gym or fitness centre", influencer: "UAE fitness influencer or content creator", news_site: "UAE lifestyle or news website" };
       const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 2000,
-          system: "You are a professional link building specialist for e-commerce brands in the UAE.",
-          messages: [{ role: "user", content: `Write 3 different outreach emails for THUGFIT (premium UAE gym activewear, thugfit.ae) targeting a ${typeLabels[blType]}.
+          system: "You are a professional partnership and affiliate outreach specialist for UAE e-commerce brands.",
+          messages: [{ role: "user", content: `Write 3 different partnership outreach emails for THUGFIT (premium UAE gym activewear, thugfit.ae) targeting a ${typeLabels[blType]}.
 
-Each email should:
-- Have a specific subject line
-- Be personalised and not sound like spam  
-- Mention a genuine value exchange (guest post, product review, collaboration)
-- Be under 150 words
-- Sound human, not AI
+IMPORTANT: THUGFIT does NOT give free products. All emails must offer ONE of these genuine partnership models:
+- Affiliate program: they earn 40% commission on every sale they refer via their unique code
+- Audience discount code: their followers get a discount code (e.g. 20% off), they get 40% of each sale
+- Paid collaboration: they purchase at cost price, mark up and resell, keeping the margin
+- Content partnership: they create content featuring THUGFIT products, earn commission on all tracked sales
+
+Each email:
+- Has a specific subject line
+- Is under 150 words
+- Sounds human and personal, not spam
+- Makes the earning/benefit crystal clear
+- Never offers free products
 
 Return ONLY a JSON array of 3 objects:
-[{"subject":"subject line","body":"full email body","type":"${typeLabels[blType]}"}]` }] }) });
+[{"subject":"subject line","body":"full email body","partnership_type":"affiliate/discount_code/paid_collab/content"}]` }] }) });
       const data = await res.json();
       const emails = JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
       setBacklinks(Array.isArray(emails) ? emails : []);
@@ -715,6 +768,9 @@ Return as JSON only:
               </div>
             </div>
 
+            {/* Staff Tasks Panel */}
+            <StaffTasksPanel sbFetch={sbFetch} showToast={showToast} />
+
             {/* How it works */}
             <div style={{ background: "#0d0d14", border: "1px solid #1e1e30", borderRadius: 12, padding: 20, marginTop: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: "#64748b", marginBottom: 14 }}>ℹ How the SEO Autopilot works</div>
@@ -948,6 +1004,27 @@ Return as JSON only:
                   {altLoading ? <><SeoSpinner size={14} /> Triggering…</> : "🖼️ Run Alt Tags Now"}
                 </button>
                 {altResults.length > 0 && <div style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>{altResults[0]}</div>}
+              </div>
+            )}
+
+            {/* ── GOOGLE BUSINESS PROFILE ──────────────────────────────────── */}
+            {sectionBtn("gbp", "Google Business Profile", "📍")}
+            {openSection === "gbp" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
+                  Auto-posts a weekly update to your Google Business Profile every Monday. This keeps your profile active which helps local UAE search rankings. Needs one-time Google OAuth setup below.
+                </div>
+                <div style={{ background: "#7c3aed10", border: "1px solid #7c3aed30", borderRadius: 8, padding: "12px 16px", marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 10 }}>📋 One-time setup (do this once):</div>
+                  {["Go to console.cloud.google.com → Image Studio project", "APIs & Services → Library → search 'My Business Posts API' → Enable", "APIs & Services → Library → search 'Google My Business API' → Enable", "OAuth consent screen → External → add your email as test user", "Credentials → Create OAuth 2.0 Client ID → Web application → add redirect URI: https://zenline-digital.vercel.app", "Copy Client ID and Client Secret → paste into your Settings below"].map((s, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 12, color: "#94a3b8" }}>
+                      <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: "#16a34a10", border: "1px solid #16a34a30", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#4ade80" }}>
+                  ✅ Once configured in Settings, the agent auto-posts to Google Business Profile every Monday. Content is AI-written, THUGFIT branded, with a link back to thugfit.ae.
+                </div>
               </div>
             )}
 
