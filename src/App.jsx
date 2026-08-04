@@ -5,6 +5,8 @@ import Chat from "./Chat.jsx";
 const SUPA_URL = "https://ioniqxioapcdgenpksex.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbmlxeGlvYXBjZGdlbnBrc2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc1MDIsImV4cCI6MjEwMDcyMzUwMn0.PS80PFMqBYMf0e6uiYvTFk90gF7a7jo97C-dzzxUGho";
 
+const ADMIN_EMAILS = ["midhun@thugfit.ae"];
+
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS   = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 const TYPE_COLORS = { motivation:"#8B7CF8", training_tips:"#00C9A7", lifestyle:"#F472B6", community:"#FBBF24", product:"#60A5FA" };
@@ -124,6 +126,74 @@ const NAV = [
   { id: "chat",      label: "Team Chat",       icon: "💬" },
 ];
 
+
+
+// ─── Platform Login Screen ────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
+
+  const doLogin = async () => {
+    if (!email || !password) { setError("Enter your email and password"); return; }
+    setLoading(true); setError("");
+    try {
+      const r = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { apikey: SUPA_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+      });
+      const data = await r.json();
+      if (data.error || data.error_description) throw new Error(data.error_description || data.error);
+      localStorage.setItem("zl_session", JSON.stringify({ access_token: data.access_token, user: data.user }));
+      onLogin({ access_token: data.access_token, user: data.user });
+    } catch(e) {
+      setError(e.message.includes("Invalid") ? "Incorrect email or password" : e.message);
+    }
+    setLoading(false);
+  };
+
+  const inp = { width: "100%", background: "#080C14", border: "1px solid #1C2537", borderRadius: 8, padding: "11px 14px", color: "#E2E8F7", fontSize: 14, outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
+  const lbl = { fontSize: 11, fontWeight: 700, color: "#6B7EB8", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 7 };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#07091A", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <style>{`*{box-sizing:border-box} input::placeholder{color:#2D3F5A} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width: 420, background: "#0D1117", border: "1px solid #1C2537", borderRadius: 20, padding: 44, boxShadow: "0 32px 80px #00000070" }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
+          <div style={{ width: 60, height: 60, background: "linear-gradient(135deg,#8B7CF8,#2563eb)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px" }}>⚡</div>
+          <div style={{ fontWeight: 800, fontSize: 24, color: "#E2E8F7", letterSpacing: "-0.5px" }}>ZenLine Digital</div>
+          <div style={{ fontSize: 13, color: "#6B7EB8", marginTop: 6 }}>THUGFIT — Internal Platform</div>
+        </div>
+
+        {error && (
+          <div style={{ background: "#f8717115", border: "1px solid #f8717140", borderRadius: 10, padding: "11px 14px", fontSize: 13, color: "#f87171", marginBottom: 20 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={lbl}>Email Address</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && doLogin()} placeholder="your@thugfit.ae" style={inp} autoFocus />
+        </div>
+        <div style={{ marginBottom: 28 }}>
+          <label style={lbl}>Password</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && doLogin()} placeholder="••••••••" style={inp} />
+        </div>
+
+        <button onClick={doLogin} disabled={loading} style={{ width: "100%", padding: "13px 0", borderRadius: 10, border: "none", cursor: loading ? "not-allowed" : "pointer", fontSize: 15, fontWeight: 700, fontFamily: "inherit", background: loading ? "#1C2537" : "linear-gradient(135deg,#8B7CF8,#2563eb)", color: loading ? "#6B7EB8" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all .2s" }}>
+          {loading ? <><div style={{ width: 16, height: 16, border: "2px solid #6B7EB840", borderTop: "2px solid #6B7EB8", borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Signing in…</> : "Sign In →"}
+        </button>
+
+        <div style={{ fontSize: 12, color: "#2D3F5A", textAlign: "center", marginTop: 20 }}>
+          Contact Midhun for access credentials
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Google Business Profile Section ─────────────────────────────────────────
 function GBPSection({ showToast, config }) {
@@ -454,9 +524,10 @@ const ALL_TASK_DEFINITIONS = [
     instructions:"Open ZenLine Digital → Dashboard → click Generate Monthly Plan button → wait 30-60 seconds for AI to create the full month plan → go to Monthly Planner → review all 20 posts across 4 weeks → start generating content by clicking ⚡ Generate on each post." },
 ];
 
-function StaffTaskManager() {
-  const [loggedIn,   setLoggedIn]   = useState(!!localStorage.getItem("zt_staff_email"));
-  const [user,       setUser]       = useState(JSON.parse(localStorage.getItem("zt_staff_user") || "null"));
+function StaffTaskManager({ platformUser }) {
+  const isAdmin = ADMIN_EMAILS.includes(platformUser?.email || "");
+  const user = { name: (platformUser?.email || "").split("@")[0].charAt(0).toUpperCase() + (platformUser?.email || "").split("@")[0].slice(1), email: platformUser?.email || "", role: isAdmin ? "admin" : "staff" };
+  const [loggedIn,   setLoggedIn]   = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass,  setLoginPass]  = useState("");
   const [loginError, setLoginError] = useState("");
@@ -476,19 +547,8 @@ function StaffTaskManager() {
   const isAdmin = user?.role === "admin";
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),3500); };
 
-  const doLogin = () => {
-    const acct = STAFF_ACCOUNTS.find(a => a.email===loginEmail.trim().toLowerCase() && a.password===loginPass);
-    if (!acct) { setLoginError("Incorrect email or password. Contact Midhun if you need access."); return; }
-    localStorage.setItem("zt_staff_email", acct.email);
-    localStorage.setItem("zt_staff_user", JSON.stringify(acct));
-    setUser(acct); setLoggedIn(true); setLoginError("");
-  };
-
-  const doLogout = () => {
-    localStorage.removeItem("zt_staff_email");
-    localStorage.removeItem("zt_staff_user");
-    setUser(null); setLoggedIn(false); setTodayTasks([]); setReportData([]);
-  };
+  const doLogin = () => {};
+  const doLogout = () => {};
 
   // Determine which tasks apply today
   const getApplicableTasks = () => {
@@ -584,29 +644,7 @@ function StaffTaskManager() {
     btn: (bg, col="#fff") => ({ padding:"10px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:700, fontFamily:"inherit", background:bg, color:col }),
   };
 
-  // LOGIN SCREEN
-  if (!loggedIn) return (
-    <div style={{minHeight:"100vh", background:"#07091A", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter',system-ui,sans-serif"}}>
-      <div style={{background:"#0D1117", border:"1px solid #1C2537", borderRadius:16, padding:40, width:420, boxShadow:"0 24px 64px #00000060"}}>
-        <div style={{textAlign:"center", marginBottom:28}}>
-          <div style={{fontSize:36, marginBottom:10}}>✅</div>
-          <div style={{fontWeight:800, fontSize:22, color:"#E2E8F7", letterSpacing:"-0.4px"}}>Staff Tasks</div>
-          <div style={{fontSize:13, color:"#6B7EB8", marginTop:6}}>ZenLine Digital — THUGFIT</div>
-        </div>
-        {loginError && <div style={{background:"#f8717120", border:"1px solid #f8717140", borderRadius:8, padding:"10px 14px", fontSize:12, color:"#f87171", marginBottom:16}}>{loginError}</div>}
-        <div style={{marginBottom:14}}>
-          <label style={s.label}>Email Address</label>
-          <input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} placeholder="your@thugfit.ae" style={s.input} onKeyDown={e=>e.key==="Enter"&&doLogin()} />
-        </div>
-        <div style={{marginBottom:22}}>
-          <label style={s.label}>Password</label>
-          <input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} placeholder="••••••••" style={s.input} onKeyDown={e=>e.key==="Enter"&&doLogin()} />
-        </div>
-        <button onClick={doLogin} style={{...s.btn("linear-gradient(135deg,#8B7CF8,#2563eb)"), width:"100%", padding:"12px 0", fontSize:14}}>Sign In →</button>
-        <div style={{fontSize:11, color:"#2D3F5A", textAlign:"center", marginTop:16}}>Contact Midhun if you need login credentials</div>
-      </div>
-    </div>
-  );
+
 
   // MAIN TASK VIEW
   return (
@@ -624,7 +662,7 @@ function StaffTaskManager() {
         <div style={{marginLeft:"auto", display:"flex", gap:8}}>
           <button onClick={()=>setView("today")} style={{...s.btn(view==="today"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📋 My Tasks</button>
           {isAdmin && <button onClick={()=>setView("report")} style={{...s.btn(view==="report"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📊 Team Report</button>}
-          <button onClick={doLogout} style={{...s.btn("#131929","#6B7EB8"), padding:"7px 14px", fontSize:12}}>Sign Out</button>
+
         </div>
       </div>
 
@@ -1738,6 +1776,9 @@ Return as JSON only:
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("zl_session")); } catch { return null; }
+  });
   const [page, setPage]               = useState("dashboard");
   const [plannerWeek, setPlannerWeek] = useState(1);
   const [plan, setPlan]               = useState(null);
@@ -2512,6 +2553,11 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
+  if (!session) return <LoginScreen onLogin={s => setSession(s)} />;
+  const signOut = () => { localStorage.removeItem("zl_session"); setSession(null); };
+  const currentUserEmail = session?.user?.email || "";
+  const isAdminUser = ADMIN_EMAILS.includes(currentUserEmail);
+
   return (
     <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, overflow: "hidden" }}>
       {/* Sidebar */}
@@ -2540,7 +2586,8 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
         </nav>
         <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 11, color: C.muted }}>THUGFIT · ZenLine FZ-LLC</div>
-          <div style={{ fontSize: 10, color: "#2D3F5A", marginTop: 2 }}>digital.zenline.ae</div>
+          <div style={{ fontSize: 10, color: "#2D3F5A", marginTop: 2 }}>{currentUserEmail}</div>
+          <button onClick={signOut} style={{ marginTop: 8, width: "100%", padding: "6px 0", borderRadius: 6, border: "1px solid #1C2537", background: "transparent", color: "#2D3F5A", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sign Out</button>
         </div>
       </div>
 
@@ -2563,7 +2610,7 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
           {page === "calendar"  && <Calendar />}
           {page === "seo"       && <SEO />}
           {page === "settings"  && <Settings />}
-          {page === "tasks"     && <StaffTaskManager />}
+          {page === "tasks"     && <StaffTaskManager platformUser={session?.user} />}
           {page === "chat"      && <Chat brandVoice={brandVoice} />}
         </div>
       </div>
