@@ -120,9 +120,373 @@ const NAV = [
   { id: "calendar",  label: "Calendar",        icon: "⊞" },
   { id: "seo",       label: "Auto SEO",        icon: "🔍" },
   { id: "settings",  label: "Settings",        icon: "⚙" },
+  { id: "tasks",     label: "Staff Tasks",      icon: "✅" },
   { id: "chat",      label: "Team Chat",       icon: "💬" },
 ];
 
+
+// ─── Staff Task Manager ──────────────────────────────────────────────────────
+const TASK_SB_URL = "https://ioniqxioapcdgenpksex.supabase.co";
+const TASK_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbmlxeGlvYXBjZGdlbnBrc2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc1MDIsImV4cCI6MjEwMDcyMzUwMn0.PS80PFMqBYMf0e6uiYvTFk90gF7a7jo97C-dzzxUGho";
+
+async function taskFetch(path, method="GET", body=null) {
+  const h = {"Content-Type":"application/json",apikey:TASK_SB_KEY,Authorization:`Bearer ${TASK_SB_KEY}`,Prefer:"return=representation"};
+  const r = await fetch(`${TASK_SB_URL}${path}`,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  return r.status===204?null:r.json().catch(()=>null);
+}
+
+const CAT_COLORS = {content:"#8B7CF8",social:"#F472B6",admin:"#FBBF24",seo:"#00C9A7",marketing:"#60A5FA"};
+const CAT_ICONS  = {content:"📝",social:"📱",admin:"⚙️",seo:"🔍",marketing:"📧"};
+
+function StaffTaskManager() {
+  const [staffName,  setStaffName]  = useState(localStorage.getItem("zt_staff_name")  || "");
+  const [staffEmail, setStaffEmail] = useState(localStorage.getItem("zt_staff_email") || "");
+  const [setupName,  setSetupName]  = useState("");
+  const [setupEmail, setSetupEmail] = useState("");
+  const [view,       setView]       = useState("today");
+  const [todayTasks, setTodayTasks] = useState([]);
+  const [reportData, setReportData] = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [completing, setCompleting] = useState({});
+  const [note,       setNote]       = useState({});
+  const [toast,      setToast]      = useState("");
+  const [reportDays, setReportDays] = useState([]);
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTask,    setNewTask]    = useState({name:"",desc:"",cat:"admin",freq:"daily",dow:"",assigned:""});
+
+  const today = new Date().toISOString().split("T")[0];
+  const isAdmin = staffEmail === "midhun@zenstitches.com" || staffEmail === "midhun@thugfit.ae" || staffName.toLowerCase() === "midhun";
+  const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),3000); };
+
+  const saveProfile = () => {
+    if(!setupName.trim()||!setupEmail.trim()){showToast("Enter your name and email");return;}
+    localStorage.setItem("zt_staff_name",  setupName.trim());
+    localStorage.setItem("zt_staff_email", setupEmail.trim());
+    setStaffName(setupName.trim());
+    setStaffEmail(setupEmail.trim());
+  };
+
+  const loadTodayTasks = async () => {
+    setLoading(true);
+    try {
+      // Get templates
+      const tmpl = await taskFetch("/rest/v1/staff_task_templates?active=eq.true&order=sort_order.asc");
+      const templates = Array.isArray(tmpl) ? tmpl : [];
+      const dow = new Date().getDay(); // 0=Sun,1=Mon,...6=Sat
+      const dom = new Date().getDate();
+
+      // Determine which templates apply today
+      const applicable = templates.filter(t => {
+        if(t.frequency==="daily") return true;
+        if(t.frequency==="weekly") return t.day_of_week===dow;
+        if(t.frequency==="monthly") return dom===1;
+        return false;
+      });
+
+      // Check if today's tasks already generated for this staff
+      const existing = await taskFetch(`/rest/v1/staff_task_log?due_date=eq.${today}&assigned_to=eq.${encodeURIComponent(staffName)}&order=created_at.asc`);
+      const existingNames = (Array.isArray(existing)?existing:[]).map(t=>t.task_name);
+
+      // Generate missing tasks
+      const toCreate = applicable.filter(t=>!existingNames.includes(t.task_name));
+      if(toCreate.length>0) {
+        await Promise.all(toCreate.map(t=>taskFetch("/rest/v1/staff_task_log","POST",{
+          task_name:t.task_name, description:t.description, category:t.category,
+          frequency:t.frequency, assigned_to:staffName, due_date:today, status:"pending"
+        })));
+      }
+
+      // Load final list
+      const final = await taskFetch(`/rest/v1/staff_task_log?due_date=eq.${today}&assigned_to=eq.${encodeURIComponent(staffName)}&order=created_at.asc`);
+      setTodayTasks(Array.isArray(final)?final:[]);
+    } catch(e){showToast("Error loading tasks");}
+    finally{setLoading(false);}
+  };
+
+  const loadReport = async () => {
+    setLoading(true);
+    try {
+      // Last 7 days
+      const days = Array.from({length:7},(_,i)=>{
+        const d=new Date(); d.setDate(d.getDate()-i);
+        return d.toISOString().split("T")[0];
+      }).reverse();
+      setReportDays(days);
+      const from = days[0];
+      const all = await taskFetch(`/rest/v1/staff_task_log?due_date=gte.${from}&order=due_date.asc,assigned_to.asc`);
+      setReportData(Array.isArray(all)?all:[]);
+    } catch(e){showToast("Error loading report");}
+    finally{setLoading(false);}
+  };
+
+  useEffect(()=>{
+    if(!staffName) return;
+    if(view==="today") loadTodayTasks();
+    else loadReport();
+  },[staffName,view]);
+
+  const completeTask = async (task) => {
+    setCompleting(p=>({...p,[task.id]:true}));
+    try {
+      await taskFetch(`/rest/v1/staff_task_log?id=eq.${task.id}`,"PATCH",{
+        status:"done", completed_at:new Date().toISOString(),
+        completed_by:staffName, note:note[task.id]||""
+      });
+      setTodayTasks(p=>p.map(t=>t.id===task.id?{...t,status:"done",completed_at:new Date().toISOString()}:t));
+      showToast("✅ Task marked as done");
+    } catch(e){showToast("❌ "+e.message);}
+    finally{setCompleting(p=>({...p,[task.id]:false}));}
+  };
+
+  const addCustomTask = async () => {
+    if(!newTask.name.trim()){showToast("Enter a task name");return;}
+    try {
+      await taskFetch("/rest/v1/staff_task_templates","POST",{
+        task_name:newTask.name, description:newTask.desc, category:newTask.cat,
+        frequency:newTask.freq, day_of_week:newTask.dow?parseInt(newTask.dow):null,
+        assigned_role:newTask.assigned||"all", active:true, sort_order:99
+      });
+      setAddingTask(false);
+      setNewTask({name:"",desc:"",cat:"admin",freq:"daily",dow:"",assigned:""});
+      showToast("✅ Task template added");
+    } catch(e){showToast("❌ "+e.message);}
+  };
+
+  // Report helpers
+  const staffList = [...new Set(reportData.map(t=>t.assigned_to))].sort();
+  const getTasksForStaffAndDay = (staff,day) => reportData.filter(t=>t.assigned_to===staff&&t.due_date===day);
+  const getStatusColor = (tasks) => {
+    if(tasks.length===0) return "#1e1e30";
+    const done=tasks.filter(t=>t.status==="done").length;
+    if(done===tasks.length) return "#16a34a";
+    if(done===0) return "#ef4444";
+    return "#f59e0b";
+  };
+  const getStatusLabel = (tasks) => {
+    if(tasks.length===0) return "—";
+    const done=tasks.filter(t=>t.status==="done").length;
+    return `${done}/${tasks.length}`;
+  };
+
+  const done   = todayTasks.filter(t=>t.status==="done").length;
+  const total  = todayTasks.length;
+  const pct    = total>0?Math.round((done/total)*100):0;
+
+  const sBorder = "1px solid #1e1e30";
+  const sCard   = {background:"#13131f",border:sBorder,borderRadius:10,padding:16,marginBottom:12};
+  const sLabel  = {fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:6};
+  const sInput  = {width:"100%",background:"#0d0d16",border:sBorder,color:"#e2e8f0",padding:"8px 12px",borderRadius:8,fontSize:13,outline:"none",fontFamily:"inherit"};
+  const sBtn    = (bg,col="#fff")=>({padding:"9px 18px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"inherit",background:bg,color:col});
+
+  if(!staffName) return (
+    <div style={{minHeight:"100vh",background:"#0d0d16",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',system-ui,sans-serif"}}>
+      <div style={{background:"#13131f",border:sBorder,borderRadius:16,padding:36,width:400,textAlign:"center"}}>
+        <div style={{fontSize:40,marginBottom:16}}>✅</div>
+        <div style={{fontWeight:800,fontSize:20,marginBottom:8,color:"#e2e8f0"}}>Staff Task Manager</div>
+        <div style={{fontSize:13,color:"#64748b",marginBottom:24}}>Enter your name and email to see your daily tasks</div>
+        <div style={{marginBottom:12}}><label style={sLabel}>Your Name</label><input value={setupName} onChange={e=>setSetupName(e.target.value)} placeholder="e.g. Sarah" style={sInput}/></div>
+        <div style={{marginBottom:20}}><label style={sLabel}>Your Email</label><input value={setupEmail} onChange={e=>setSetupEmail(e.target.value)} placeholder="sarah@thugfit.ae" style={sInput}/></div>
+        <button onClick={saveProfile} style={{...sBtn("linear-gradient(135deg,#7c3aed,#2563eb)"),width:"100%"}}>Start Working →</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0d0d16",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif"}}>
+      <style>{`*{box-sizing:border-box;} input::placeholder,textarea::placeholder{color:#3a3a5c;} select option{background:#0d0d16;}`}</style>
+      {toast&&<div style={{position:"fixed",top:20,right:20,zIndex:999,background:"#13131f",border:sBorder,borderRadius:10,padding:"12px 18px",fontSize:13,color:"#e2e8f0",boxShadow:"0 8px 32px #00000060"}}>{toast}</div>}
+
+      {/* Header */}
+      <div style={{background:"#09090f",borderBottom:sBorder,padding:"16px 28px",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:40,height:40,background:"linear-gradient(135deg,#7c3aed,#2563eb)",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>✅</div>
+        <div>
+          <div style={{fontWeight:800,fontSize:18}}>Staff Tasks</div>
+          <div style={{fontSize:11,color:"#3a3a5c"}}>Logged in as {staffName} · <span style={{cursor:"pointer",color:"#7c3aed"}} onClick={()=>{localStorage.removeItem("zt_staff_name");localStorage.removeItem("zt_staff_email");setStaffName("");setStaffEmail("");}}>Switch</span></div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+          <button onClick={()=>setView("today")} style={{...sBtn(view==="today"?"#7c3aed":"#1e1e30"),padding:"7px 16px"}}>📋 My Tasks</button>
+          {isAdmin&&<button onClick={()=>setView("report")} style={{...sBtn(view==="report"?"#7c3aed":"#1e1e30"),padding:"7px 16px"}}>📊 Team Report</button>}
+          {isAdmin&&<button onClick={()=>setAddingTask(!addingTask)} style={{...sBtn("#1e1e30"),padding:"7px 16px"}}>+ Add Task</button>}
+        </div>
+      </div>
+
+      <div style={{padding:"24px 28px",maxWidth:1000,margin:"0 auto"}}>
+
+        {/* Add Task Panel */}
+        {addingTask&&isAdmin&&(
+          <div style={{...sCard,marginBottom:20,background:"#0d1117",border:"1px solid #7c3aed40"}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:"#a78bfa"}}>+ Add Task Template</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+              <div><label style={sLabel}>Task Name</label><input value={newTask.name} onChange={e=>setNewTask(p=>({...p,name:e.target.value}))} placeholder="e.g. Check TikTok comments" style={sInput}/></div>
+              <div><label style={sLabel}>Category</label>
+                <select value={newTask.cat} onChange={e=>setNewTask(p=>({...p,cat:e.target.value}))} style={sInput}>
+                  <option value="daily">Social</option><option value="content">Content</option><option value="admin">Admin</option><option value="seo">SEO</option><option value="marketing">Marketing</option>
+                </select>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}><label style={sLabel}>Instructions for staff</label><input value={newTask.desc} onChange={e=>setNewTask(p=>({...p,desc:e.target.value}))} placeholder="Step by step what to do" style={sInput}/></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div><label style={sLabel}>Frequency</label>
+                <select value={newTask.freq} onChange={e=>setNewTask(p=>({...p,freq:e.target.value}))} style={sInput}>
+                  <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly (1st)</option>
+                </select>
+              </div>
+              {newTask.freq==="weekly"&&<div><label style={sLabel}>Day of Week</label>
+                <select value={newTask.dow} onChange={e=>setNewTask(p=>({...p,dow:e.target.value}))} style={sInput}>
+                  <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
+                </select>
+              </div>}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={addCustomTask} style={sBtn("linear-gradient(135deg,#7c3aed,#2563eb)")}>Save Task Template</button>
+              <button onClick={()=>setAddingTask(false)} style={sBtn("#1e1e30")}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* MY TASKS TODAY */}
+        {view==="today"&&(
+          <>
+            {/* Progress bar */}
+            <div style={{...sCard,marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{fontWeight:700,fontSize:15}}>Today — {new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
+                <div style={{fontWeight:800,fontSize:22,color:pct===100?"#4ade80":pct>50?"#fb923c":"#f87171"}}>{pct}%</div>
+              </div>
+              <div style={{background:"#0d0d16",borderRadius:20,height:10,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${pct}%`,background:pct===100?"#16a34a":"linear-gradient(90deg,#7c3aed,#2563eb)",borderRadius:20,transition:"width .5s"}}/>
+              </div>
+              <div style={{fontSize:12,color:"#64748b",marginTop:8}}>{done}/{total} tasks completed today</div>
+            </div>
+
+            {loading?<div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading tasks...</div>
+            :todayTasks.length===0?<div style={{...sCard,textAlign:"center",padding:40,color:"#64748b"}}>No tasks for today. Check back Monday for weekly tasks.</div>
+            :(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {todayTasks.map(task=>(
+                  <div key={task.id} style={{background:"#13131f",border:`1px solid ${task.status==="done"?"#16a34a40":"#1e1e30"}`,borderRadius:10,padding:16,opacity:task.status==="done"?0.7:1,transition:"all .2s"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                      <div style={{width:36,height:36,borderRadius:9,background:`${CAT_COLORS[task.category]||"#7c3aed"}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{CAT_ICONS[task.category]||"📋"}</div>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <span style={{fontWeight:700,fontSize:14,textDecoration:task.status==="done"?"line-through":"none",color:task.status==="done"?"#4a4a6a":"#e2e8f0"}}>{task.task_name}</span>
+                          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:`${CAT_COLORS[task.category]||"#7c3aed"}20`,color:CAT_COLORS[task.category]||"#7c3aed"}}>{task.category}</span>
+                          <span style={{fontSize:10,color:"#3a3a5c"}}>{task.frequency}</span>
+                        </div>
+                        {task.description&&<div style={{fontSize:12,color:"#64748b",lineHeight:1.6,marginBottom:8}}>{task.description}</div>}
+                        {task.status==="done"&&<div style={{fontSize:11,color:"#4ade80"}}>✓ Done at {new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}</div>}
+                        {task.status!=="done"&&(
+                          <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
+                            <input value={note[task.id]||""} onChange={e=>setNote(p=>({...p,[task.id]:e.target.value}))} placeholder="Add a note (optional)..." style={{...sInput,flex:1,fontSize:11,padding:"6px 10px"}}/>
+                            <button onClick={()=>completeTask(task)} disabled={completing[task.id]} style={{...sBtn("#16a34a"),padding:"6px 16px",fontSize:12,whiteSpace:"nowrap"}}>
+                              {completing[task.id]?"...":"✓ Done"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* TEAM REPORT */}
+        {view==="report"&&isAdmin&&(
+          <>
+            <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>Team Performance — Last 7 Days</div>
+            {loading?<div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading report...</div>:(
+              <>
+                {/* Summary row */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                  {[
+                    ["Total Tasks",reportData.length,"#a78bfa"],
+                    ["Completed",reportData.filter(t=>t.status==="done").length,"#4ade80"],
+                    ["Pending",reportData.filter(t=>t.status==="pending"&&t.due_date===today).length,"#fb923c"],
+                    ["Completion Rate",reportData.length>0?Math.round(reportData.filter(t=>t.status==="done").length/reportData.length*100)+"%":"0%","#60a5fa"],
+                  ].map(([l,v,c])=>(
+                    <div key={l} style={{background:"#13131f",border:sBorder,borderRadius:10,padding:"14px 16px"}}>
+                      <div style={{fontWeight:800,fontSize:22,color:c}}>{v}</div>
+                      <div style={{fontSize:11,color:"#4a4a6a",marginTop:4}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Grid: staff × days */}
+                {staffList.length===0?<div style={{...sCard,textAlign:"center",padding:30,color:"#64748b"}}>No task data yet. Staff need to log in and complete tasks first.</div>:(
+                  <div style={{background:"#13131f",border:sBorder,borderRadius:12,overflow:"hidden"}}>
+                    <div style={{display:"grid",gridTemplateColumns:`180px repeat(${reportDays.length},1fr)`,background:"#09090f",borderBottom:sBorder}}>
+                      <div style={{padding:"10px 14px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Staff Member</div>
+                      {reportDays.map(d=>{
+                        const dt=new Date(d+"T00:00:00");
+                        const isToday=d===today;
+                        return <div key={d} style={{padding:"10px 8px",fontSize:11,fontWeight:700,color:isToday?"#a78bfa":"#64748b",textAlign:"center",borderLeft:sBorder,background:isToday?"#7c3aed10":"transparent"}}>
+                          <div>{dt.toLocaleDateString("en-GB",{weekday:"short"})}</div>
+                          <div style={{fontSize:10,color:"#3a3a5c"}}>{dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</div>
+                        </div>;
+                      })}
+                    </div>
+                    {staffList.map(staff=>(
+                      <div key={staff} style={{display:"grid",gridTemplateColumns:`180px repeat(${reportDays.length},1fr)`,borderBottom:sBorder}}>
+                        <div style={{padding:"12px 14px",fontSize:13,fontWeight:600,color:"#e2e8f0",display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{width:28,height:28,borderRadius:"50%",background:"#7c3aed20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#a78bfa",flexShrink:0}}>{staff[0]?.toUpperCase()}</div>
+                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}}>{staff}</span>
+                        </div>
+                        {reportDays.map(day=>{
+                          const dayTasks=getTasksForStaffAndDay(staff,day);
+                          const bg=getStatusColor(dayTasks);
+                          const lbl=getStatusLabel(dayTasks);
+                          const isPast=day<today;
+                          const allDone=dayTasks.length>0&&dayTasks.every(t=>t.status==="done");
+                          const noneDone=dayTasks.length>0&&dayTasks.every(t=>t.status!=="done");
+                          return (
+                            <div key={day} title={dayTasks.map(t=>`${t.status==="done"?"✓":"✗"} ${t.task_name}`).join("
+")}
+                              style={{borderLeft:sBorder,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px",background:day===today?"#7c3aed08":"transparent",cursor:dayTasks.length>0?"help":"default"}}>
+                              {dayTasks.length===0?<span style={{fontSize:11,color:"#2a2a40"}}>—</span>:(
+                                <>
+                                  <div style={{width:32,height:32,borderRadius:8,background:allDone?"#16a34a":(isPast&&noneDone)?"#ef4444":"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>
+                                    {allDone?"✓":(isPast&&noneDone)?"✗":"⏳"}
+                                  </div>
+                                  <div style={{fontSize:10,color:"#64748b",marginTop:4}}>{lbl}</div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Detailed task breakdown for today */}
+                <div style={{marginTop:20,fontWeight:700,fontSize:14,marginBottom:12}}>Today's Detail</div>
+                {reportData.filter(t=>t.due_date===today).length===0
+                  ?<div style={{...sCard,textAlign:"center",color:"#64748b",fontSize:13}}>No tasks generated for today yet</div>
+                  :reportData.filter(t=>t.due_date===today).map(task=>(
+                    <div key={task.id} style={{...sCard,display:"flex",alignItems:"center",gap:12,padding:"10px 14px"}}>
+                      <div style={{width:24,height:24,borderRadius:6,background:task.status==="done"?"#16a34a":(task.due_date<today&&task.status!=="done")?"#ef4444":"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>
+                        {task.status==="done"?"✓":task.due_date<today?"✗":"⏳"}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600}}>{task.task_name}</div>
+                        <div style={{fontSize:11,color:"#64748b"}}>{task.assigned_to} · {task.category}</div>
+                      </div>
+                      <div style={{fontSize:11,color:task.status==="done"?"#4ade80":"#f87171",fontWeight:700}}>
+                        {task.status==="done"?`Done ${task.completed_by?`by ${task.completed_by}`:""} ${task.completed_at?new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}):""}`:task.status.toUpperCase()}
+                      </div>
+                    </div>
+                  ))
+                }
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── SEO Module (inlined) ────────────────────────────────────────────────────
 
@@ -360,24 +724,28 @@ function SEO() {
       const typeLabels = { uae_fitness_blog: "UAE fitness and wellness blog", gym_dubai: "Dubai gym or fitness centre", influencer: "UAE fitness influencer or content creator", news_site: "UAE lifestyle or news website" };
       const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 2000,
-          system: "You are a professional partnership and affiliate outreach specialist for UAE e-commerce brands.",
-          messages: [{ role: "user", content: `Write 3 different partnership outreach emails for THUGFIT (premium UAE gym activewear, thugfit.ae) targeting a ${typeLabels[blType]}.
+          system: "You are a professional partnership outreach specialist for UAE fitness brands.",
+          messages: [{ role: "user", content: `Write 3 different outreach emails for THUGFIT Train & Earn programme (thugfit.ae/thugfit-train-earn) targeting a ${typeLabels[blType]}.
 
-IMPORTANT: THUGFIT does NOT give free products. All emails must offer ONE of these genuine partnership models:
-- Affiliate program: they earn 40% commission on every sale they refer via their unique code
-- Audience discount code: their followers get a discount code (e.g. 20% off), they get 40% of each sale
-- Paid collaboration: they purchase at cost price, mark up and resell, keeping the margin
-- Content partnership: they create content featuring THUGFIT products, earn commission on all tracked sales
+THUGFIT Train & Earn Programme details:
+- Members get a unique AUDIENCE CODE: their network uses it for 20% off all THUGFIT orders
+- Members get a personal VIP CODE: 40% off their own personal orders
+- Members earn commission on every sale made through their audience code
+- Programme page: thugfit.ae/thugfit-train-earn
+- No free products are given — this is a genuine earn-by-promoting programme
+- Perfect for personal trainers, gym coaches, fitness influencers, gym owners
 
-Each email:
-- Has a specific subject line
-- Is under 150 words
-- Sounds human and personal, not spam
-- Makes the earning/benefit crystal clear
-- Never offers free products
+Each email must:
+- Invite them to JOIN the Train & Earn programme
+- Explain the earning mechanism clearly (their code → followers buy → they earn)
+- Mention the 20% audience discount and 40% personal VIP discount
+- Have a specific subject line
+- Be under 150 words, personal and human (not spam)
+- Include the programme link: thugfit.ae/thugfit-train-earn
+- Never promise free products
 
 Return ONLY a JSON array of 3 objects:
-[{"subject":"subject line","body":"full email body","partnership_type":"affiliate/discount_code/paid_collab/content"}]` }] }) });
+[{"subject":"subject line","body":"full email body","partnership_type":"train_and_earn"}]` }] }) });
       const data = await res.json();
       const emails = JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
       setBacklinks(Array.isArray(emails) ? emails : []);
@@ -1887,7 +2255,7 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
             </div>
           )}
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: page === "seo" ? 0 : 24 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: (page === "seo" || page === "tasks") ? 0 : 24 }}>
           {page === "dashboard" && <Dashboard />}
           {page === "planner"   && <Planner />}
           {page === "approval"  && <Approval />}
@@ -1895,6 +2263,7 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
           {page === "calendar"  && <Calendar />}
           {page === "seo"       && <SEO />}
           {page === "settings"  && <Settings />}
+          {page === "tasks"     && <StaffTaskManager />}
           {page === "chat"      && <Chat brandVoice={brandVoice} />}
         </div>
       </div>
