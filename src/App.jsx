@@ -441,8 +441,7 @@ function StaffTaskManager() {
                           const allDone=dayTasks.length>0&&dayTasks.every(t=>t.status==="done");
                           const noneDone=dayTasks.length>0&&dayTasks.every(t=>t.status!=="done");
                           return (
-                            <div key={day} title={dayTasks.map(t=>`${t.status==="done"?"✓":"✗"} ${t.task_name}`).join("
-")}
+                            <div key={day} title={dayTasks.map(t=>`${t.status==="done"?"✓":"✗"} ${t.task_name}`).join(" | ")}
                               style={{borderLeft:sBorder,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px",background:day===today?"#7c3aed08":"transparent",cursor:dayTasks.length>0?"help":"default"}}>
                               {dayTasks.length===0?<span style={{fontSize:11,color:"#2a2a40"}}>—</span>:(
                                 <>
