@@ -390,18 +390,41 @@ Return ONLY JSON: {"seo_title":"max 60 chars with keyword","meta_desc":"max 155 
         fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=mobile`).then(r => r.json()),
         fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=desktop`).then(r => r.json()),
       ]);
-      const mobScore = Math.round((mob.lighthouseResult?.categories?.performance?.score || 0) * 100);
-      const deskScore = Math.round((desk.lighthouseResult?.categories?.performance?.score || 0) * 100);
+
+      // Check for API errors
+      if (mob.error || desk.error) throw new Error(mob.error?.message || desk.error?.message || "PageSpeed API error");
+
+      const mobRaw  = mob.lighthouseResult?.categories?.performance?.score;
+      const deskRaw = desk.lighthouseResult?.categories?.performance?.score;
+      const mobScore  = mobRaw  != null ? Math.round(mobRaw  * 100) : null;
+      const deskScore = deskRaw != null ? Math.round(deskRaw * 100) : null;
+      const failed = mobScore === null && deskScore === null;
+
       const audits = mob.lighthouseResult?.audits || {};
-      const issues = Object.values(audits).filter(a => a.score !== null && a.score < 0.9 && a.details?.type !== "opportunity" && a.description).slice(0, 6).map(a => ({ title: a.title, description: a.description, score: Math.round((a.score || 0) * 100) }));
+      const issues = Object.values(audits)
+        .filter(a => a.score !== null && a.score < 0.9 && a.description)
+        .slice(0, 6)
+        .map(a => a.title);
+
       const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 800,
-          system: "You are a web performance expert. Give simple, actionable WordPress fixes.",
-          messages: [{ role: "user", content: `thugfit.ae PageSpeed scores: Mobile ${mobScore}/100, Desktop ${deskScore}/100.
-Issues: ${issues.map(i => i.title).join(", ")}.
-Give exactly 5 simple fixes a non-developer WordPress admin can do. Number them 1-5. Each fix: one line title + one sentence how to do it in WordPress. No code.` }] }) });
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 900,
+          system: "You are a web performance expert. Give simple, actionable WordPress plugin-based fixes. Write in plain text only — no markdown stars, no hashtags, no bold formatting.",
+          messages: [{ role: "user", content: `thugfit.ae is a WooCommerce store on WordPress.
+${failed ? "PageSpeed API could not measure the site (may be blocking crawlers or very slow)." : `PageSpeed scores: Mobile ${mobScore}/100, Desktop ${deskScore}/100.`}
+${issues.length > 0 ? `Known issues: ${issues.join(", ")}.` : ""}
+
+Give exactly 5 practical fixes a non-developer WordPress admin can do using free plugins or WordPress settings.
+Format each fix exactly like this (plain text, no stars or hashtags):
+
+1. Fix Title Here
+What to do: One clear sentence explaining exactly where to click and what to do in WordPress.
+
+2. Fix Title Here
+What to do: One clear sentence.
+
+(continue for all 5 fixes)` }] }) });
       const d = await res.json();
-      setSpeedData({ mobScore, deskScore, issues, fixes: d.content[0].text });
+      setSpeedData({ mobScore, deskScore, failed, fixes: d.content[0].text });
     } catch (e) { showToast("❌ " + e.message); }
     finally { setSpeedLoading(false); }
   };
@@ -727,14 +750,39 @@ Give exactly 5 simple fixes a non-developer WordPress admin can do. Number them 
                       {[["📱 Mobile", speedData.mobScore], ["🖥 Desktop", speedData.deskScore]].map(([label, score]) => (
                         <div key={label} style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 20, textAlign: "center" }}>
                           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10 }}>{label}</div>
-                          <div style={{ fontSize: 48, fontWeight: 900, color: scoreColor(score), lineHeight: 1 }}>{score}</div>
-                          <div style={{ fontSize: 12, color: "#3a3a5c", marginTop: 6 }}>/100 — {score >= 90 ? "Good ✅" : score >= 50 ? "Needs Work ⚠️" : "Poor ❌"}</div>
+                          {score === null
+                            ? <div style={{ fontSize: 18, fontWeight: 700, color: "#fb923c", lineHeight: 1.4 }}>Could not<br />measure</div>
+                            : <>
+                                <div style={{ fontSize: 48, fontWeight: 900, color: scoreColor(score), lineHeight: 1 }}>{score}</div>
+                                <div style={{ fontSize: 12, color: "#3a3a5c", marginTop: 6 }}>/100 — {score >= 90 ? "Good ✅" : score >= 50 ? "Needs Work ⚠️" : "Poor ❌"}</div>
+                              </>
+                          }
                         </div>
                       ))}
                     </div>
+                    {speedData.failed && (
+                      <div style={{ background: "#fb923c10", border: "1px solid #fb923c30", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#fb923c" }}>
+                        ⚠ PageSpeed could not fully measure thugfit.ae — the site may be blocking automated crawlers, or loading too slowly to measure. The fixes below still apply.
+                      </div>
+                    )}
                     <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 16 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#a78bfa", marginBottom: 12 }}>🛠 Step-by-step fixes for your team:</div>
-                      <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{speedData.fixes}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#a78bfa", marginBottom: 14 }}>🛠 Step-by-step fixes for your team:</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        {speedData.fixes.split(/\n(?=\d+\.)/).filter(s => s.trim()).map((fix, i) => {
+                          const lines = fix.trim().split("\n");
+                          const title = lines[0].replace(/^\d+\.\s*/, "").trim();
+                          const detail = lines.slice(1).join(" ").replace(/^What to do:\s*/i, "").trim();
+                          return (
+                            <div key={i} style={{ display: "flex", gap: 12, padding: "12px 14px", background: "#13131f", borderRadius: 8, border: "1px solid #1e1e30" }}>
+                              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{i + 1}</div>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: 13, color: "#e2e8f0", marginBottom: 4 }}>{title}</div>
+                                {detail && <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>{detail}</div>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
