@@ -126,12 +126,9 @@ const NAV = [
 
 // ─── SEO Module (inlined) ───────────────────────────────────────────────────────
 // ─── Supabase helpers ─────────────────────────────────────────────────────────
-const SB_URL = "https://ioniqxioapcdgenpksex.supabase.co";
-
 async function sbFetch(path, method = "GET", body = null) {
-  const key = localStorage.getItem("is_supa_key") || import.meta.env?.VITE_SUPABASE_ANON_KEY || "";
-  const h = { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}`, Prefer: "return=representation" };
-  const r = await fetch(`${SB_URL}${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
+  const h = { "Content-Type": "application/json", apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, Prefer: "return=representation" };
+  const r = await fetch(`${SUPA_URL}${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
   if (!r.ok && r.status !== 204) { const e = await r.json().catch(() => ({})); throw new Error(e.message || `Supabase ${r.status}`); }
   return r.status === 204 ? null : r.json().catch(() => null);
 }
