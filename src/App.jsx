@@ -175,6 +175,7 @@ function SEO() {
   const [wpUser, setWpUser]           = useState("");
   const [wpPass, setWpPass]           = useState("");
   const [postStatus, setPostStatus]   = useState("draft");
+  const [googleApiKey, setGoogleApiKey] = useState("");
 
   // ── Tasks state ──────────────────────────────────────────────────────────────
   const [taskLoading, setTaskLoading]     = useState(false);
@@ -236,9 +237,9 @@ function SEO() {
     setSaving(true);
     try {
       await sbFetch(`/rest/v1/seo_automation?id=eq.${config.id}`, "PATCH", {
-        wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus,
+        wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus, google_api_key: googleApiKey,
       });
-      setConfig(prev => ({ ...prev, wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus }));
+      setConfig(prev => ({ ...prev, wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus, google_api_key: googleApiKey }));
       setShowSettings(false);
       showToast("✅ Settings saved");
     } catch (e) { showToast("❌ " + e.message); }
@@ -387,8 +388,8 @@ Return ONLY JSON: {"seo_title":"max 60 chars with keyword","meta_desc":"max 155 
     try {
       const siteUrl = config?.wp_url || "https://thugfit.ae";
       const [mob, desk] = await Promise.all([
-        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=mobile`).then(r => r.json()),
-        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=desktop`).then(r => r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=mobile${googleApiKey ? "&key=" + googleApiKey : ""}`).then(r => r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=desktop${googleApiKey ? "&key=" + googleApiKey : ""}`).then(r => r.json()),
       ]);
 
       // Check for API errors
@@ -515,6 +516,11 @@ What to do: One clear sentence.
               <div><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Username</label><input value={wpUser} onChange={e => setWpUser(e.target.value)} placeholder="mithzjango@gmail.com" style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} /></div>
             </div>
             <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Application Password</label><input type="password" value={wpPass} onChange={e => setWpPass(e.target.value)} placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} /></div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Google API Key <span style={{ color: "#fb923c", fontWeight: 400, fontSize: 10, textTransform: "none" }}>(required for Page Speed checker)</span></label>
+              <input type="password" value={googleApiKey} onChange={e => setGoogleApiKey(e.target.value)} placeholder="AIza..." style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} />
+              <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 5 }}>Get free key → console.cloud.google.com → APIs &amp; Services → Credentials → Create API Key → then enable "PageSpeed Insights API"</div>
+            </div>
             <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Publish Articles As</label>
               <select value={postStatus} onChange={e => setPostStatus(e.target.value)} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }}>
                 <option value="draft">Draft — you review before publishing (recommended)</option>
