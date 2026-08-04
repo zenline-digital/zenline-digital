@@ -124,8 +124,8 @@ const NAV = [
 ];
 
 
-// ─── SEO Module (inlined) ───────────────────────────────────────────────────────
-// ─── Supabase helpers ─────────────────────────────────────────────────────────
+// ─── SEO Module (inlined) ────────────────────────────────────────────────────
+
 async function sbFetch(path, method = "GET", body = null) {
   const h = { "Content-Type": "application/json", apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, Prefer: "return=representation" };
   const r = await fetch(`${SUPA_URL}${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
@@ -133,7 +133,6 @@ async function sbFetch(path, method = "GET", body = null) {
   return r.status === 204 ? null : r.json().catch(() => null);
 }
 
-// ─── UI Components ────────────────────────────────────────────────────────────
 function Toggle({ on, onChange, disabled }) {
   return (
     <div onClick={() => !disabled && onChange(!on)} style={{ width: 56, height: 30, borderRadius: 15, background: on ? "#16a34a" : "#1e1e30", cursor: disabled ? "not-allowed" : "pointer", position: "relative", transition: "background .3s", flexShrink: 0 }}>
@@ -142,32 +141,8 @@ function Toggle({ on, onChange, disabled }) {
   );
 }
 
-function Spinner({ size = 18 }) {
+function SeoSpinner({ size = 18 }) {
   return <div style={{ width: size, height: size, border: `2px solid #7c3aed30`, borderTop: `2px solid #7c3aed`, borderRadius: "50%", animation: "spin .8s linear infinite", flexShrink: 0 }} />;
-}
-
-function Input({ label, value, onChange, placeholder, type = "text", hint }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      {label && <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{label}</label>}
-      {type === "textarea"
-        ? <textarea value={value} onChange={onChange} placeholder={placeholder} rows={3} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "10px 12px", borderRadius: 8, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.5, fontFamily: "inherit" }} />
-        : <input type={type} value={value} onChange={onChange} placeholder={placeholder} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "10px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} />
-      }
-      {hint && <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 4 }}>{hint}</div>}
-    </div>
-  );
-}
-
-function Select({ label, value, onChange, options }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      {label && <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{label}</label>}
-      <select value={value} onChange={onChange} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "10px 12px", borderRadius: 8, fontSize: 13, outline: "none" }}>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
 }
 
 function timeAgo(dateStr) {
@@ -181,8 +156,10 @@ function timeAgo(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ─── Main SEO Component ───────────────────────────────────────────────────────
 function SEO() {
+  const [activeTab, setActiveTab] = useState("autopilot");
+
+  // ── Autopilot state ──────────────────────────────────────────────────────────
   const [config, setConfig]           = useState(null);
   const [log, setLog]                 = useState([]);
   const [queue, setQueue]             = useState([]);
@@ -194,16 +171,27 @@ function SEO() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast]             = useState("");
   const [genKwLoading, setGenKwLoading] = useState(false);
+  const [wpUrl, setWpUrl]             = useState("");
+  const [wpUser, setWpUser]           = useState("");
+  const [wpPass, setWpPass]           = useState("");
+  const [postStatus, setPostStatus]   = useState("draft");
 
-  // Editable config fields
-  const [wpUrl, setWpUrl]       = useState("");
-  const [wpUser, setWpUser]     = useState("");
-  const [wpPass, setWpPass]     = useState("");
-  const [postStatus, setPostStatus] = useState("draft");
+  // ── Tasks state ──────────────────────────────────────────────────────────────
+  const [taskLoading, setTaskLoading]     = useState(false);
+  const [backlinks, setBacklinks]         = useState([]);
+  const [blType, setBlType]               = useState("uae_fitness_blog");
+  const [products, setProducts]           = useState([]);
+  const [productSaving, setProductSaving] = useState({});
+  const [speedData, setSpeedData]         = useState(null);
+  const [speedLoading, setSpeedLoading]   = useState(false);
+  const [gscInput, setGscInput]           = useState("");
+  const [gscActions, setGscActions]       = useState("");
+  const [gscLoading, setGscLoading]       = useState(false);
+  const [openSection, setOpenSection]     = useState("backlink");
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3500); };
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
 
-  // ─── Load data ──────────────────────────────────────────────────────────────
+  // ── Load data ────────────────────────────────────────────────────────────────
   const loadAll = async () => {
     setLoading(true);
     try {
@@ -220,7 +208,6 @@ function SEO() {
         setWpPass(cfg.wp_app_password || "");
         setPostStatus(cfg.post_status || "draft");
       } else {
-        // Create initial config
         const created = await sbFetch("/rest/v1/seo_automation", "POST", { is_enabled: false, wp_url: "https://thugfit.ae", post_status: "draft" });
         const newCfg = Array.isArray(created) ? created[0] : created;
         setConfig(newCfg);
@@ -233,19 +220,17 @@ function SEO() {
 
   useEffect(() => { loadAll(); }, []);
 
-  // ─── Toggle automation ──────────────────────────────────────────────────────
   const toggleAutomation = async (on) => {
     if (!config?.id) return;
     setSaving(true);
     try {
       await sbFetch(`/rest/v1/seo_automation?id=eq.${config.id}`, "PATCH", { is_enabled: on });
       setConfig(prev => ({ ...prev, is_enabled: on }));
-      showToast(on ? "✅ Automation started — first article publishes at 9 AM UAE time" : "⏸ Automation paused");
+      showToast(on ? "✅ Automation started — first article at 9 AM UAE time" : "⏸ Automation paused");
     } catch (e) { showToast("❌ " + e.message); }
     finally { setSaving(false); }
   };
 
-  // ─── Save settings ──────────────────────────────────────────────────────────
   const saveSettings = async () => {
     if (!config?.id) return;
     setSaving(true);
@@ -260,61 +245,44 @@ function SEO() {
     finally { setSaving(false); }
   };
 
-  // ─── Manual trigger ─────────────────────────────────────────────────────────
   const triggerNow = async () => {
-    if (!config?.wp_username || !config?.wp_app_password) {
-      showToast("⚠ Add WordPress credentials in Settings first"); setShowSettings(true); return;
-    }
+    if (!config?.wp_username || !config?.wp_app_password) { showToast("⚠ Add WordPress credentials in Settings first"); setShowSettings(true); return; }
     setTriggering(true);
     try {
-      const secret = localStorage.getItem("is_cron_secret") || "";
-      const res = await fetch("/api/seo-cron", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}`, "x-vercel-cron": "1" } });
+      const res = await fetch("/api/seo-cron", { method: "POST", headers: { "Content-Type": "application/json", "x-vercel-cron": "1" } });
       const data = await res.json();
-      if (data.success) {
-        showToast(`✅ Published: "${data.title}"`);
-        setTimeout(loadAll, 2000);
-      } else if (data.skipped) {
-        showToast("ℹ " + data.reason);
-      } else {
-        showToast("❌ " + (data.error || "Unknown error"));
-      }
+      if (data.success) { showToast(`✅ Published: "${data.title}"`); setTimeout(loadAll, 2000); }
+      else if (data.skipped) { showToast("ℹ " + data.reason); }
+      else { showToast("❌ " + (data.error || "Unknown error")); }
     } catch (e) { showToast("❌ " + e.message); }
     finally { setTriggering(false); }
   };
 
-  // ─── Add keyword to queue ───────────────────────────────────────────────────
   const addKeyword = async () => {
     if (!newKw.trim()) return;
     setAddingKw(true);
     try {
       await sbFetch("/rest/v1/seo_keyword_queue", "POST", { keyword: newKw.trim(), used: false, priority: 8 });
       setNewKw("");
-      showToast("✅ Keyword added to queue");
+      showToast("✅ Keyword added");
       const kws = await sbFetch("/rest/v1/seo_keyword_queue?order=created_at.asc&limit=50");
       setQueue(Array.isArray(kws) ? kws : []);
     } catch (e) { showToast("❌ " + e.message); }
     finally { setAddingKw(false); }
   };
 
-  // ─── AI generate keywords ───────────────────────────────────────────────────
   const generateKeywords = async () => {
     setGenKwLoading(true);
     try {
-      const res = await fetch("/api/claude", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6", max_tokens: 1000,
-          system: "You are an SEO keyword researcher specialising in UAE e-commerce and activewear.",
-          messages: [{ role: "user", content: "Generate 15 high-value SEO keywords for THUGFIT (premium gym activewear brand, thugfit.ae, UAE market — Dubai, Abu Dhabi). Mix of: product keywords, informational, local UAE. Return ONLY a JSON array of keyword strings, nothing else. Example: [\"gym leggings Dubai\",\"men shorts UAE\"]" }],
-        }),
-      });
+      const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000,
+          system: "SEO keyword researcher for UAE e-commerce and activewear.",
+          messages: [{ role: "user", content: "Generate 15 high-value SEO keywords for THUGFIT (premium gym activewear, thugfit.ae, UAE). Mix: product, informational, local UAE. Return ONLY a JSON array of strings." }] }) });
       const data = await res.json();
-      const text = data.content[0].text.trim();
-      const clean = text.replace(/```json|```/g, "").trim();
-      const keywords = JSON.parse(clean);
+      const keywords = JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
       if (Array.isArray(keywords)) {
         await Promise.all(keywords.map(kw => sbFetch("/rest/v1/seo_keyword_queue", "POST", { keyword: kw, used: false, priority: 5 }).catch(() => {})));
-        showToast(`✅ Added ${keywords.length} AI-generated keywords to queue`);
+        showToast(`✅ Added ${keywords.length} keywords`);
         const kws = await sbFetch("/rest/v1/seo_keyword_queue?order=created_at.asc&limit=50");
         setQueue(Array.isArray(kws) ? kws : []);
       }
@@ -323,248 +291,495 @@ function SEO() {
   };
 
   const removeKeyword = async (id) => {
-    try {
-      await sbFetch(`/rest/v1/seo_keyword_queue?id=eq.${id}`, "DELETE");
-      setQueue(prev => prev.filter(k => k.id !== id));
-    } catch (e) { showToast("❌ " + e.message); }
+    try { await sbFetch(`/rest/v1/seo_keyword_queue?id=eq.${id}`, "DELETE"); setQueue(prev => prev.filter(k => k.id !== id)); }
+    catch (e) { showToast("❌ " + e.message); }
   };
 
-  // ─── Computed ────────────────────────────────────────────────────────────────
+  // ── Tasks functions ──────────────────────────────────────────────────────────
+
+  const generateBacklinks = async () => {
+    setTaskLoading(true);
+    setBacklinks([]);
+    try {
+      const typeLabels = { uae_fitness_blog: "UAE fitness and wellness blog", gym_dubai: "Dubai gym or fitness centre", influencer: "UAE fitness influencer or content creator", news_site: "UAE lifestyle or news website" };
+      const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 2000,
+          system: "You are a professional link building specialist for e-commerce brands in the UAE.",
+          messages: [{ role: "user", content: `Write 3 different outreach emails for THUGFIT (premium UAE gym activewear, thugfit.ae) targeting a ${typeLabels[blType]}.
+
+Each email should:
+- Have a specific subject line
+- Be personalised and not sound like spam  
+- Mention a genuine value exchange (guest post, product review, collaboration)
+- Be under 150 words
+- Sound human, not AI
+
+Return ONLY a JSON array of 3 objects:
+[{"subject":"subject line","body":"full email body","type":"${typeLabels[blType]}"}]` }] }) });
+      const data = await res.json();
+      const emails = JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
+      setBacklinks(Array.isArray(emails) ? emails : []);
+      showToast("✅ 3 outreach emails generated");
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setTaskLoading(false); }
+  };
+
+  const scanProducts = async () => {
+    if (!config?.wp_username || !config?.wp_app_password) { showToast("⚠ Add WordPress credentials in Auto SEO settings first"); return; }
+    setTaskLoading(true);
+    setProducts([]);
+    try {
+      const creds = btoa(`${config.wp_username}:${config.wp_app_password}`);
+      const wpBase = config.wp_url || "https://thugfit.ae";
+      const r = await fetch(`${wpBase}/wp-json/wc/v3/products?per_page=20&status=publish`, {
+        headers: { Authorization: `Basic ${creds}` }
+      });
+      if (!r.ok) throw new Error("Could not fetch products — make sure WooCommerce REST API is enabled");
+      const prods = await r.json();
+      showToast(`✅ Found ${prods.length} products — generating SEO suggestions...`);
+
+      const withSeo = await Promise.all(prods.slice(0, 10).map(async (p) => {
+        try {
+          const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 300,
+              system: "SEO specialist for UAE e-commerce. Write optimised product meta.",
+              messages: [{ role: "user", content: `Product: "${p.name}" on thugfit.ae (UAE gym activewear).
+Return ONLY JSON: {"seo_title":"max 60 chars with keyword","meta_desc":"max 155 chars, includes keyword and UAE"}` }] }) });
+          const d = await res.json();
+          const seo = JSON.parse(d.content[0].text.replace(/```json|```/g, "").trim());
+          return { ...p, seo_title: seo.seo_title, meta_desc: seo.meta_desc, applied: false };
+        } catch { return { ...p, seo_title: p.name + " | THUGFIT UAE", meta_desc: "Premium " + p.name + " available in UAE. Shop THUGFIT activewear at thugfit.ae.", applied: false }; }
+      }));
+      setProducts(withSeo);
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setTaskLoading(false); }
+  };
+
+  const applyProductSeo = async (product) => {
+    if (!config?.wp_username || !config?.wp_app_password) return;
+    setProductSaving(prev => ({ ...prev, [product.id]: true }));
+    try {
+      const creds = btoa(`${config.wp_username}:${config.wp_app_password}`);
+      const wpBase = config.wp_url || "https://thugfit.ae";
+      await fetch(`${wpBase}/wp-json/wc/v3/products/${product.id}`, {
+        method: "PUT", headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ meta_data: [
+          { key: "_yoast_wpseo_title", value: product.seo_title },
+          { key: "_yoast_wpseo_metadesc", value: product.meta_desc },
+          { key: "rank_math_title", value: product.seo_title },
+          { key: "rank_math_description", value: product.meta_desc },
+        ]})
+      });
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, applied: true } : p));
+      showToast("✅ SEO applied to " + product.name);
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setProductSaving(prev => ({ ...prev, [product.id]: false })); }
+  };
+
+  const applyAllProducts = async () => {
+    for (const p of products.filter(p => !p.applied)) { await applyProductSeo(p); }
+    showToast("✅ All products updated");
+  };
+
+  const checkSpeed = async () => {
+    setSpeedLoading(true);
+    setSpeedData(null);
+    try {
+      const siteUrl = config?.wp_url || "https://thugfit.ae";
+      const [mob, desk] = await Promise.all([
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=mobile`).then(r => r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=desktop`).then(r => r.json()),
+      ]);
+      const mobScore = Math.round((mob.lighthouseResult?.categories?.performance?.score || 0) * 100);
+      const deskScore = Math.round((desk.lighthouseResult?.categories?.performance?.score || 0) * 100);
+      const audits = mob.lighthouseResult?.audits || {};
+      const issues = Object.values(audits).filter(a => a.score !== null && a.score < 0.9 && a.details?.type !== "opportunity" && a.description).slice(0, 6).map(a => ({ title: a.title, description: a.description, score: Math.round((a.score || 0) * 100) }));
+      const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 800,
+          system: "You are a web performance expert. Give simple, actionable WordPress fixes.",
+          messages: [{ role: "user", content: `thugfit.ae PageSpeed scores: Mobile ${mobScore}/100, Desktop ${deskScore}/100.
+Issues: ${issues.map(i => i.title).join(", ")}.
+Give exactly 5 simple fixes a non-developer WordPress admin can do. Number them 1-5. Each fix: one line title + one sentence how to do it in WordPress. No code.` }] }) });
+      const d = await res.json();
+      setSpeedData({ mobScore, deskScore, issues, fixes: d.content[0].text });
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setSpeedLoading(false); }
+  };
+
+  const generateGscActions = async () => {
+    if (!gscInput.trim()) { showToast("Describe what you see in GSC first"); return; }
+    setGscLoading(true);
+    try {
+      const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 800,
+          system: "You are an SEO consultant. Give specific, actionable Google Search Console advice for a UAE e-commerce brand.",
+          messages: [{ role: "user", content: `thugfit.ae Google Search Console data this week:\n${gscInput}\n\nGive me exactly 5 specific actions to take this week to improve. Number them 1-5. Be specific — tell me exactly what to click, what to change, what to write. No vague advice.` }] }) });
+      const d = await res.json();
+      setGscActions(d.content[0].text);
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setGscLoading(false); }
+  };
+
+  const copyText = (text) => { navigator.clipboard.writeText(text); showToast("✅ Copied to clipboard"); };
+
+  const scoreColor = (s) => s >= 90 ? "#4ade80" : s >= 50 ? "#fb923c" : "#f87171";
+
   const isOn = config?.is_enabled || false;
   const lastRun = config?.last_run;
   const latestPost = log.find(l => l.action === "blog_published" && l.status !== "failed");
   const pending = queue.filter(k => !k.used).length;
   const published = log.filter(l => l.action === "blog_published" && l.status !== "failed").length;
 
+  const tabBtn = (id, label) => ({
+    padding: "9px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+    fontFamily: "inherit", background: activeTab === id ? "#7c3aed" : "transparent",
+    color: activeTab === id ? "#fff" : "#4a4a6a", transition: "all .2s"
+  });
+
+  const sectionBtn = (id, label, icon) => (
+    <div onClick={() => setOpenSection(openSection === id ? null : id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", background: openSection === id ? "#13131f" : "#0d0d16", border: "1px solid", borderColor: openSection === id ? "#7c3aed40" : "#1e1e30", borderRadius: 10, cursor: "pointer", marginBottom: 8, transition: "all .2s" }}>
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <span style={{ fontWeight: 700, fontSize: 14, color: openSection === id ? "#a78bfa" : "#e2e8f0", flex: 1 }}>{label}</span>
+      <span style={{ color: "#3a3a5c", fontSize: 12 }}>{openSection === id ? "▲" : "▼"}</span>
+    </div>
+  );
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#0d0d16", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, color: "#64748b" }}>
-      <Spinner size={24} /> Loading SEO Agent…
+      <SeoSpinner size={24} /> Loading SEO Agent…
     </div>
   );
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d0d16", color: "#e2e8f0", fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
-      <style>{`
-        *{box-sizing:border-box;margin:0;padding:0;}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-        ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:#0d0d16;} ::-webkit-scrollbar-thumb{background:#2a2a40;border-radius:3px;}
-        select option{background:#0d0d16;color:#e2e8f0;} input::placeholder,textarea::placeholder{color:#3a3a5c;}
-        textarea{font-family:inherit;}
-      `}</style>
+      <style>{`*{box-sizing:border-box;} @keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}} ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:#0d0d16;} ::-webkit-scrollbar-thumb{background:#2a2a40;border-radius:3px;} select option{background:#0d0d16;} input::placeholder,textarea::placeholder{color:#3a3a5c;} textarea{font-family:inherit;}`}</style>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 999, background: "#13131f", border: "1px solid #1e1e30", borderRadius: 10, padding: "12px 18px", fontSize: 13, color: "#e2e8f0", boxShadow: "0 8px 32px #00000060", maxWidth: 380 }}>
-          {toast}
-        </div>
-      )}
+      {toast && <div style={{ position: "fixed", top: 20, right: 20, zIndex: 999, background: "#13131f", border: "1px solid #1e1e30", borderRadius: 10, padding: "12px 18px", fontSize: 13, color: "#e2e8f0", boxShadow: "0 8px 32px #00000060", maxWidth: 380 }}>{toast}</div>}
 
       {/* Header */}
-      <div style={{ background: "#09090f", borderBottom: "1px solid #1e1e30", padding: "18px 28px", display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ width: 40, height: 40, background: isOn ? "linear-gradient(135deg,#16a34a,#059669)" : "linear-gradient(135deg,#7c3aed,#2563eb)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, transition: "background .5s" }}>🤖</div>
+      <div style={{ background: "#09090f", borderBottom: "1px solid #1e1e30", padding: "16px 28px", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ width: 40, height: 40, background: isOn ? "linear-gradient(135deg,#16a34a,#059669)" : "linear-gradient(135deg,#7c3aed,#2563eb)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🤖</div>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-0.4px" }}>SEO Autopilot</div>
-          <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 1 }}>THUGFIT · thugfit.ae — Fully Autonomous SEO Agent</div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>SEO Autopilot</div>
+          <div style={{ fontSize: 11, color: "#3a3a5c" }}>THUGFIT · thugfit.ae — Fully Autonomous SEO Agent</div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
-          <button onClick={() => { setShowSettings(!showSettings); }} style={{ background: "none", border: "1px solid #1e1e30", color: "#4a4a6a", padding: "7px 14px", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-            ⚙ Settings
-          </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "1px solid #1e1e30", color: "#4a4a6a", padding: "7px 14px", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>⚙ Settings</button>
           <button onClick={loadAll} style={{ background: "none", border: "1px solid #1e1e30", color: "#4a4a6a", padding: "7px 12px", borderRadius: 7, cursor: "pointer", fontSize: 12 }}>↻</button>
         </div>
       </div>
 
-      <div style={{ padding: "28px", maxWidth: 1000, margin: "0 auto" }}>
+      {/* Tabs */}
+      <div style={{ background: "#09090f", borderBottom: "1px solid #1e1e30", padding: "0 28px", display: "flex", gap: 4 }}>
+        <button onClick={() => setActiveTab("autopilot")} style={tabBtn("autopilot", "🤖 Autopilot")}>🤖 Autopilot</button>
+        <button onClick={() => setActiveTab("tasks")} style={tabBtn("tasks", "📋 SEO Tasks")}>📋 SEO Tasks</button>
+      </div>
 
-        {/* Settings Panel */}
+      <div style={{ padding: "24px 28px", maxWidth: 1000, margin: "0 auto" }}>
+
+        {/* ── SETTINGS PANEL ────────────────────────────────────────────────── */}
         {showSettings && (
           <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 12, padding: 22, marginBottom: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18, color: "#e2e8f0" }}>⚙ WordPress Connection</div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>⚙ WordPress Connection</div>
             <div style={{ fontSize: 12, color: "#64748b", background: "#0d0d16", border: "1px solid #1e1e30", borderRadius: 8, padding: "10px 14px", marginBottom: 16, lineHeight: 1.7 }}>
-              <strong style={{ color: "#a78bfa" }}>How to get your WordPress Application Password:</strong><br />
-              1. Log into thugfit.ae/wp-admin<br />
-              2. Go to <strong>Users → Your Profile</strong><br />
-              3. Scroll to <strong>Application Passwords</strong> section<br />
-              4. Enter name "ZenLine Digital" → click <strong>Add New Application Password</strong><br />
-              5. Copy the password shown (only visible once) → paste below
+              <strong style={{ color: "#a78bfa" }}>How to get Application Password:</strong><br />
+              1. thugfit.ae/wp-admin → Users → click your admin user<br />
+              2. Scroll to <strong>Application Passwords</strong> → name it "ZenLine Digital" → Add<br />
+              3. Copy the password (shown once only) → paste below
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <Input label="WordPress Site URL" value={wpUrl} onChange={e => setWpUrl(e.target.value)} placeholder="https://thugfit.ae" />
-              <Input label="WordPress Username" value={wpUser} onChange={e => setWpUser(e.target.value)} placeholder="admin or your WP username" />
+              <div><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Site URL</label><input value={wpUrl} onChange={e => setWpUrl(e.target.value)} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} /></div>
+              <div><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Username</label><input value={wpUser} onChange={e => setWpUser(e.target.value)} placeholder="mithzjango@gmail.com" style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} /></div>
             </div>
-            <Input label="Application Password" type="password" value={wpPass} onChange={e => setWpPass(e.target.value)} placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" />
-            <Select label="Publish articles as" value={postStatus} onChange={e => setPostStatus(e.target.value)}
-              options={[{ value: "draft", label: "Draft — you review before publishing (recommended)" }, { value: "publish", label: "Live immediately — auto-publishes without review" }]} />
-            <div style={{ fontSize: 11, color: "#4ade80", background: "#16a34a10", border: "1px solid #16a34a30", borderRadius: 6, padding: "8px 12px", marginBottom: 14 }}>
-              💡 Start with "Draft" — you can review each article in WordPress before it goes live. Switch to "Live" when you're happy with the quality.
+            <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Application Password</label><input type="password" value={wpPass} onChange={e => setWpPass(e.target.value)} placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} /></div>
+            <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Publish Articles As</label>
+              <select value={postStatus} onChange={e => setPostStatus(e.target.value)} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }}>
+                <option value="draft">Draft — you review before publishing (recommended)</option>
+                <option value="publish">Live immediately — auto-publishes without review</option>
+              </select>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={saveSettings} disabled={saving} style={{ padding: "10px 22px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff" }}>
-                {saving ? "Saving…" : "Save Settings"}
-              </button>
+              <button onClick={saveSettings} disabled={saving} style={{ padding: "10px 22px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff" }}>{saving ? "Saving…" : "Save Settings"}</button>
               <button onClick={() => setShowSettings(false)} style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid #1e1e30", cursor: "pointer", fontSize: 13, background: "#0d0d16", color: "#64748b" }}>Cancel</button>
             </div>
           </div>
         )}
 
-        {/* Main ON/OFF Card */}
-        <div style={{ background: isOn ? "#0a1a0a" : "#13131f", border: "2px solid", borderColor: isOn ? "#16a34a50" : "#1e1e30", borderRadius: 16, padding: 28, marginBottom: 24, transition: "all .4s" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: isOn ? "#4ade80" : "#e2e8f0" }}>
-                  {isOn ? "🟢 Running" : "⚪ Paused"}
+        {/* ══════════════════════════════════════════════════════════════════════
+            TAB: AUTOPILOT
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === "autopilot" && (
+          <>
+            {/* ON/OFF Card */}
+            <div style={{ background: isOn ? "#0a1a0a" : "#13131f", border: "2px solid", borderColor: isOn ? "#16a34a50" : "#1e1e30", borderRadius: 16, padding: 28, marginBottom: 20, transition: "all .4s" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: isOn ? "#4ade80" : "#e2e8f0" }}>{isOn ? "🟢 Running" : "⚪ Paused"}</div>
+                    {isOn && <div style={{ fontSize: 11, background: "#16a34a20", color: "#4ade80", border: "1px solid #16a34a40", borderRadius: 20, padding: "3px 10px", fontWeight: 700, animation: "pulse 2s ease-in-out infinite" }}>ACTIVE</div>}
+                  </div>
+                  <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>
+                    {isOn ? `Publishing one SEO article to thugfit.ae every day at 9:00 AM UAE time. ${lastRun ? `Last run: ${timeAgo(lastRun)}.` : "Not yet run."}` : "Turn on to start publishing SEO articles to thugfit.ae automatically every day."}
+                  </div>
                 </div>
-                {isOn && <div style={{ fontSize: 11, background: "#16a34a20", color: "#4ade80", border: "1px solid #16a34a40", borderRadius: 20, padding: "3px 10px", fontWeight: 700, animation: "pulse 2s ease-in-out infinite" }}>ACTIVE</div>}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                  <Toggle on={isOn} onChange={toggleAutomation} disabled={saving} />
+                  <div style={{ fontSize: 10, color: "#3a3a5c", fontWeight: 600 }}>{isOn ? "ON" : "OFF"}</div>
+                </div>
               </div>
-              <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>
-                {isOn
-                  ? `Publishing one SEO article to thugfit.ae every day at 9:00 AM UAE time. ${lastRun ? `Last run: ${timeAgo(lastRun)}.` : "Not yet run."}`
-                  : "Turn on to start publishing SEO articles to thugfit.ae automatically every day. No action needed after turning on."}
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <Toggle on={isOn} onChange={toggleAutomation} disabled={saving} />
-              <div style={{ fontSize: 10, color: "#3a3a5c", fontWeight: 600 }}>{isOn ? "ON" : "OFF"}</div>
-            </div>
-          </div>
-
-          {/* Status row */}
-          {isOn && latestPost && (
-            <div style={{ marginTop: 18, background: "#0d0d16", border: "1px solid #16a34a30", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 20 }}>📝</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 2 }}>Latest article</div>
-                <div style={{ fontWeight: 600, fontSize: 14, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{latestPost.title}</div>
-                <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 2 }}>Keyword: {latestPost.keyword} · {timeAgo(latestPost.created_at)}</div>
-              </div>
-              {latestPost.wp_post_url && (
-                <a href={latestPost.wp_post_url} target="_blank" rel="noreferrer"
-                  style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: "none", flexShrink: 0 }}>
-                  View in WP →
-                </a>
+              {isOn && latestPost && (
+                <div style={{ marginTop: 18, background: "#0d0d16", border: "1px solid #16a34a30", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ fontSize: 20 }}>📝</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", marginBottom: 2 }}>Latest article</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{latestPost.title}</div>
+                    <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 2 }}>Keyword: {latestPost.keyword} · {timeAgo(latestPost.created_at)}</div>
+                  </div>
+                  {latestPost.wp_post_url && <a href={latestPost.wp_post_url} target="_blank" rel="noreferrer" style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: "none", flexShrink: 0 }}>View in WP →</a>}
+                </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Stats row */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
-          {[
-            { label: "Articles Published", value: published, icon: "📄", color: "#4ade80" },
-            { label: "Keywords in Queue", value: pending, icon: "🔑", color: "#a78bfa" },
-            { label: "Next Post", value: isOn ? "9:00 AM today/tomorrow" : "Paused", icon: "⏰", color: "#fb923c" },
-            { label: "Post Status", value: config?.post_status === "publish" ? "Live immediately" : "Draft review", icon: "📤", color: "#60a5fa" },
-          ].map(({ label, value, icon, color }) => (
-            <div key={label} style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 10, padding: "16px 18px" }}>
-              <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
-              <div style={{ fontWeight: 800, fontSize: 20, color }}>{value}</div>
-              <div style={{ fontSize: 11, color: "#4a4a6a", marginTop: 4 }}>{label}</div>
+            {/* Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 }}>
+              {[["Articles Published", published, "📄", "#4ade80"], ["Keywords in Queue", pending, "🔑", "#a78bfa"], ["Next Post", isOn ? "9:00 AM today/tomorrow" : "Paused", "⏰", "#fb923c"], ["Post Status", config?.post_status === "publish" ? "Live immediately" : "Draft review", "📤", "#60a5fa"]].map(([label, value, icon, color]) => (
+                <div key={label} style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 10, padding: "16px 18px" }}>
+                  <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
+                  <div style={{ fontWeight: 800, fontSize: 18, color }}>{value}</div>
+                  <div style={{ fontSize: 11, color: "#4a4a6a", marginTop: 4 }}>{label}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-
-          {/* Keyword Queue */}
-          <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 12, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>🔑 Keyword Queue</div>
-              <button onClick={generateKeywords} disabled={genKwLoading}
-                style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "5px 11px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                {genKwLoading ? <><Spinner size={12} /> Generating…</> : "✨ AI Generate Keywords"}
-              </button>
-            </div>
-            <div style={{ fontSize: 11, color: "#3a3a5c", marginBottom: 12 }}>
-              Articles are published using these keywords in order. When queue is empty, the agent uses its built-in UAE activewear keyword list.
-            </div>
-            {/* Add keyword */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <input value={newKw} onChange={e => setNewKw(e.target.value)} placeholder="Add a keyword…" onKeyDown={e => e.key === "Enter" && addKeyword()}
-                style={{ flex: 1, background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "8px 11px", borderRadius: 7, fontSize: 12, outline: "none" }} />
-              <button onClick={addKeyword} disabled={addingKw || !newKw.trim()}
-                style={{ padding: "8px 14px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff" }}>
-                + Add
-              </button>
-            </div>
-            <div style={{ maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
-              {queue.length === 0
-                ? <div style={{ color: "#2a2a40", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No keywords in queue — agent uses built-in list</div>
-                : queue.map((kw, i) => (
-                  <div key={kw.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0d0d16", border: "1px solid", borderColor: kw.used ? "#1e1e30" : "#2a2a40", borderRadius: 7, padding: "8px 11px", opacity: kw.used ? 0.4 : 1 }}>
-                    <span style={{ fontSize: 10, color: "#3a3a5c", minWidth: 18 }}>#{i + 1}</span>
-                    <span style={{ flex: 1, fontSize: 12, color: kw.used ? "#3a3a5c" : "#e2e8f0", textDecoration: kw.used ? "line-through" : "none" }}>{kw.keyword}</span>
-                    {kw.used
-                      ? <span style={{ fontSize: 9, color: "#16a34a", fontWeight: 700 }}>✓ DONE</span>
-                      : <button onClick={() => removeKeyword(kw.id)} style={{ background: "none", border: "none", color: "#3a3a5c", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
-                    }
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-
-          {/* Activity Log */}
-          <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 12, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>📋 Activity Log</div>
-              <button onClick={triggerNow} disabled={triggering}
-                style={{ background: triggering ? "#1a1a2e" : "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: triggering ? "#3a3a5c" : "#fff", padding: "6px 14px", borderRadius: 7, cursor: triggering ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                {triggering ? <><Spinner size={13} /> Publishing…</> : "▶ Publish Now"}
-              </button>
-            </div>
-            <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-              {log.length === 0
-                ? <div style={{ color: "#2a2a40", fontSize: 12, textAlign: "center", padding: "30px 0" }}>No activity yet — turn on automation or click "Publish Now"</div>
-                : log.map(entry => (
-                  <div key={entry.id} style={{ background: "#0d0d16", border: "1px solid", borderColor: entry.status === "failed" ? "#ef444430" : entry.action === "error" ? "#ef444430" : "#1e1e30", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                      <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>
-                        {entry.status === "failed" || entry.action === "error" ? "❌" : entry.action === "blog_published" ? "📝" : "ℹ"}
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {entry.title && <div style={{ fontWeight: 600, fontSize: 12, color: "#e2e8f0", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.title}</div>}
-                        {entry.keyword && <div style={{ fontSize: 11, color: "#64748b" }}>🔑 {entry.keyword}</div>}
-                        {entry.status && <div style={{ fontSize: 10, color: entry.status === "failed" ? "#f87171" : "#4ade80", marginTop: 3, fontWeight: 600 }}>{entry.status.toUpperCase()}</div>}
-                        {entry.error && <div style={{ fontSize: 10, color: "#f87171", marginTop: 3 }}>{entry.error.slice(0, 80)}</div>}
-                        {entry.wp_post_url && (
-                          <a href={entry.wp_post_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#7c3aed", textDecoration: "none" }}>View in WordPress →</a>
-                        )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              {/* Keyword Queue */}
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 12, padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>🔑 Keyword Queue</div>
+                  <button onClick={generateKeywords} disabled={genKwLoading} style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "5px 11px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                    {genKwLoading ? <><SeoSpinner size={12} /> Generating…</> : "✨ AI Generate Keywords"}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: "#3a3a5c", marginBottom: 12 }}>Queue empty = agent uses 30 built-in UAE activewear keywords.</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <input value={newKw} onChange={e => setNewKw(e.target.value)} placeholder="Add a keyword…" onKeyDown={e => e.key === "Enter" && addKeyword()} style={{ flex: 1, background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "8px 11px", borderRadius: 7, fontSize: 12, outline: "none" }} />
+                  <button onClick={addKeyword} disabled={addingKw || !newKw.trim()} style={{ padding: "8px 14px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff" }}>+ Add</button>
+                </div>
+                <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {queue.length === 0
+                    ? <div style={{ color: "#2a2a40", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No keywords — agent uses built-in list</div>
+                    : queue.map((kw, i) => (
+                      <div key={kw.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 7, padding: "8px 11px", opacity: kw.used ? 0.4 : 1 }}>
+                        <span style={{ fontSize: 10, color: "#3a3a5c", minWidth: 18 }}>#{i + 1}</span>
+                        <span style={{ flex: 1, fontSize: 12, color: kw.used ? "#3a3a5c" : "#e2e8f0", textDecoration: kw.used ? "line-through" : "none" }}>{kw.keyword}</span>
+                        {kw.used ? <span style={{ fontSize: 9, color: "#16a34a", fontWeight: 700 }}>✓ DONE</span> : <button onClick={() => removeKeyword(kw.id)} style={{ background: "none", border: "none", color: "#3a3a5c", cursor: "pointer", fontSize: 14 }}>×</button>}
                       </div>
-                      <div style={{ fontSize: 10, color: "#2a2a40", flexShrink: 0 }}>{timeAgo(entry.created_at)}</div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Activity Log */}
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: 12, padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>📋 Activity Log</div>
+                  <button onClick={triggerNow} disabled={triggering} style={{ background: triggering ? "#1a1a2e" : "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: triggering ? "#3a3a5c" : "#fff", padding: "6px 14px", borderRadius: 7, cursor: triggering ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                    {triggering ? <><SeoSpinner size={13} /> Publishing…</> : "▶ Publish Now"}
+                  </button>
+                </div>
+                <div style={{ maxHeight: 310, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {log.length === 0
+                    ? <div style={{ color: "#2a2a40", fontSize: 12, textAlign: "center", padding: "30px 0" }}>No activity yet — turn on automation or click "Publish Now"</div>
+                    : log.map(entry => (
+                      <div key={entry.id} style={{ background: "#0d0d16", border: "1px solid", borderColor: entry.status === "failed" ? "#ef444430" : "#1e1e30", borderRadius: 8, padding: "10px 12px" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{entry.status === "failed" || entry.action === "error" ? "❌" : "📝"}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            {entry.title && <div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 3 }}>{entry.title}</div>}
+                            {entry.keyword && <div style={{ fontSize: 11, color: "#64748b" }}>🔑 {entry.keyword}</div>}
+                            {entry.status && <div style={{ fontSize: 10, color: entry.status === "failed" ? "#f87171" : "#4ade80", marginTop: 3, fontWeight: 600 }}>{entry.status.toUpperCase()}</div>}
+                            {entry.error && <div style={{ fontSize: 10, color: "#f87171", marginTop: 3 }}>{entry.error.slice(0, 80)}</div>}
+                            {entry.wp_post_url && <a href={entry.wp_post_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#7c3aed", textDecoration: "none" }}>View in WordPress →</a>}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#2a2a40", flexShrink: 0 }}>{timeAgo(entry.created_at)}</div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+
+            {/* How it works */}
+            <div style={{ background: "#0d0d14", border: "1px solid #1e1e30", borderRadius: 12, padding: 20, marginTop: 20 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#64748b", marginBottom: 14 }}>ℹ How the SEO Autopilot works</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
+                {[["1","Every morning at 9 AM","Runs automatically — no action needed"],["2","Picks a keyword","Your queue first, then built-in UAE list"],["3","Writes the article","1,200–1,500 words with meta tags + Google ping"],["4","Publishes to WordPress","Draft for review or live immediately"]].map(([step,title,desc]) => (
+                  <div key={step} style={{ textAlign: "center" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, margin: "0 auto 10px" }}>{step}</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 5 }}>{title}</div>
+                    <div style={{ fontSize: 11, color: "#4a4a6a", lineHeight: 1.5 }}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            TAB: SEO TASKS
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === "tasks" && (
+          <div>
+            <div style={{ background: "#13131f", border: "1px solid #7c3aed30", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#a78bfa", lineHeight: 1.6 }}>
+              💡 These are SEO tasks your team does <strong>weekly or monthly</strong>. Each section generates ready-to-use content — your staff reviews and applies with one click.
+            </div>
+
+            {/* ── BACKLINK OUTREACH ─────────────────────────────────────────── */}
+            {sectionBtn("backlink", "Backlink Outreach Emails", "🔗")}
+            {openSection === "backlink" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
+                  Backlinks from other UAE websites pointing to thugfit.ae improve your Google ranking. This tool generates ready-to-send outreach emails. Your staff just copies and sends them.
+                </div>
+                <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Target Type</label>
+                    <select value={blType} onChange={e => setBlType(e.target.value)} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }}>
+                      <option value="uae_fitness_blog">UAE Fitness or Wellness Blog</option>
+                      <option value="gym_dubai">Dubai Gym or Fitness Centre</option>
+                      <option value="influencer">UAE Fitness Influencer</option>
+                      <option value="news_site">UAE Lifestyle or News Website</option>
+                    </select>
+                  </div>
+                  <button onClick={generateBacklinks} disabled={taskLoading} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 8 }}>
+                    {taskLoading ? <><SeoSpinner size={14} /> Generating…</> : "✨ Generate 3 Emails"}
+                  </button>
+                </div>
+                {backlinks.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {backlinks.map((email, i) => (
+                      <div key={i} style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 16 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase" }}>Email {i + 1}</div>
+                          <button onClick={() => copyText(`Subject: ${email.subject}\n\n${email.body}`)} style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "4px 10px", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>📋 Copy</button>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", marginBottom: 8 }}>Subject: {email.subject}</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{email.body}</div>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11, color: "#3a3a5c", textAlign: "center" }}>Copy each email → find the target website's contact page → paste and send</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── PRODUCT PAGE SEO ──────────────────────────────────────────── */}
+            {sectionBtn("product", "Product Page SEO Scanner", "🛍️")}
+            {openSection === "product" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
+                  Scans your WooCommerce products and generates SEO-optimised titles and meta descriptions for each one. Review the suggestions, then click "Apply" to update your store automatically.
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                  <button onClick={scanProducts} disabled={taskLoading} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+                    {taskLoading ? <><SeoSpinner size={14} /> Scanning products…</> : "🔍 Scan Products"}
+                  </button>
+                  {products.length > 0 && (
+                    <button onClick={applyAllProducts} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "#16a34a", color: "#fff" }}>✅ Apply All</button>
+                  )}
+                </div>
+                {products.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {products.map(p => (
+                      <div key={p.id} style={{ background: "#0d0d16", border: "1px solid", borderColor: p.applied ? "#16a34a40" : "#2a2a40", borderRadius: 10, padding: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>PRODUCT</div>
+                            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{p.name}</div>
+                            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>SEO TITLE <span style={{ color: p.seo_title?.length > 60 ? "#f87171" : "#4ade80" }}>({p.seo_title?.length || 0}/60)</span></div>
+                            <div style={{ fontSize: 13, color: "#a78bfa", marginBottom: 8, padding: "6px 10px", background: "#7c3aed10", borderRadius: 6 }}>{p.seo_title}</div>
+                            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>META DESCRIPTION <span style={{ color: p.meta_desc?.length > 155 ? "#f87171" : "#4ade80" }}>({p.meta_desc?.length || 0}/155)</span></div>
+                            <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px 10px", background: "#0a0a14", borderRadius: 6 }}>{p.meta_desc}</div>
+                          </div>
+                          <button onClick={() => applyProductSeo(p)} disabled={p.applied || productSaving[p.id]} style={{ padding: "8px 16px", borderRadius: 8, border: "none", cursor: p.applied ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700, background: p.applied ? "#16a34a" : "#7c3aed", color: "#fff", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                            {productSaving[p.id] ? <SeoSpinner size={12} /> : p.applied ? "✅ Applied" : "Apply"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── PAGE SPEED ────────────────────────────────────────────────── */}
+            {sectionBtn("speed", "Page Speed Checker", "⚡")}
+            {openSection === "speed" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
+                  Checks thugfit.ae speed on Google PageSpeed Insights. Slow sites rank lower on Google. This shows your score and gives your team step-by-step fixes.
+                </div>
+                <button onClick={checkSpeed} disabled={speedLoading} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  {speedLoading ? <><SeoSpinner size={14} /> Checking speed…</> : "⚡ Check Speed Now"}
+                </button>
+                {speedData && (
+                  <div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+                      {[["📱 Mobile", speedData.mobScore], ["🖥 Desktop", speedData.deskScore]].map(([label, score]) => (
+                        <div key={label} style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 20, textAlign: "center" }}>
+                          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10 }}>{label}</div>
+                          <div style={{ fontSize: 48, fontWeight: 900, color: scoreColor(score), lineHeight: 1 }}>{score}</div>
+                          <div style={{ fontSize: 12, color: "#3a3a5c", marginTop: 6 }}>/100 — {score >= 90 ? "Good ✅" : score >= 50 ? "Needs Work ⚠️" : "Poor ❌"}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#a78bfa", marginBottom: 12 }}>🛠 Step-by-step fixes for your team:</div>
+                      <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{speedData.fixes}</div>
                     </div>
                   </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-
-        {/* How it works */}
-        <div style={{ background: "#0d0d14", border: "1px solid #1e1e30", borderRadius: 12, padding: 20, marginTop: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: "#64748b", marginBottom: 14 }}>ℹ How the SEO Autopilot works</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
-            {[
-              { step: "1", title: "Every morning at 9 AM", desc: "The agent wakes up automatically — no action needed from you" },
-              { step: "2", title: "Picks a keyword", desc: "Uses your queue first, then falls back to 30 built-in UAE activewear keywords" },
-              { step: "3", title: "Writes the article", desc: "Claude writes a 1,200–1,500 word SEO-optimised article about THUGFIT products" },
-              { step: "4", title: "Publishes to WordPress", desc: "Sends directly to thugfit.ae/wp-admin — as draft for review or live immediately" },
-            ].map(({ step, title, desc }) => (
-              <div key={step} style={{ textAlign: "center" }}>
-                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, margin: "0 auto 10px" }}>{step}</div>
-                <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 5 }}>{title}</div>
-                <div style={{ fontSize: 11, color: "#4a4a6a", lineHeight: 1.5 }}>{desc}</div>
+                )}
               </div>
-            ))}
-          </div>
-        </div>
+            )}
 
+            {/* ── GOOGLE SEARCH CONSOLE ─────────────────────────────────────── */}
+            {sectionBtn("gsc", "Google Search Console Advisor", "📊")}
+            {openSection === "gsc" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
+                  Your staff opens Google Search Console, copies what they see (clicks, impressions, top queries), pastes it here — and the AI tells them exactly what to do this week.
+                </div>
+                <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 10 }}>📋 Staff checklist — open Google Search Console and note:</div>
+                  {["Total clicks this week vs last week","Total impressions this week vs last week","Top 5 queries (search terms) people used to find thugfit.ae","Any pages with high impressions but low clicks","Any manual actions or coverage errors"].map((item, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 12, color: "#94a3b8" }}>
+                      <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {item}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Paste what you see in Google Search Console:</label>
+                  <textarea value={gscInput} onChange={e => setGscInput(e.target.value)} rows={5} placeholder="e.g. Clicks: 45 (up from 32 last week). Impressions: 1,200. Top queries: thugfit uae, gym leggings dubai, activewear uae..." style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "10px 12px", borderRadius: 8, fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.6 }} />
+                </div>
+                <button onClick={generateGscActions} disabled={gscLoading || !gscInput.trim()} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  {gscLoading ? <><SeoSpinner size={14} /> Analysing…</> : "🧠 Generate This Week's Actions"}
+                </button>
+                {gscActions && (
+                  <div style={{ background: "#0d0d16", border: "1px solid #16a34a30", borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#4ade80" }}>✅ This week's action plan:</div>
+                      <button onClick={() => copyText(gscActions)} style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "4px 10px", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>📋 Copy</button>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{gscActions}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
