@@ -929,7 +929,7 @@ function SEO() {
     setLoading(true);
     try {
       const [cfgs, logs, kws] = await Promise.all([
-        sbFetch("/rest/v1/seo_automation?limit=1"),
+        sbFetch("/rest/v1/seo_automation?order=created_at.asc&limit=1"),
         sbFetch("/rest/v1/seo_activity_log?order=created_at.desc&limit=30"),
         sbFetch("/rest/v1/seo_keyword_queue?order=created_at.asc&limit=50"),
       ]);
@@ -940,6 +940,8 @@ function SEO() {
         setWpUser(cfg.wp_username || "");
         setWpPass(cfg.wp_app_password || "");
         setPostStatus(cfg.post_status || "draft");
+        setGoogleApiKey(cfg.google_api_key || "");
+        setGoogleIndexingKey(cfg.google_indexing_key || "");
       } else {
         const created = await sbFetch("/rest/v1/seo_automation", "POST", { is_enabled: false, wp_url: "https://thugfit.ae", post_status: "draft" });
         const newCfg = Array.isArray(created) ? created[0] : created;
