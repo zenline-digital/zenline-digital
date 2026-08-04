@@ -525,8 +525,8 @@ const ALL_TASK_DEFINITIONS = [
 ];
 
 function StaffTaskManager({ platformUser }) {
-  const isAdmin = ADMIN_EMAILS.includes(platformUser?.email || "");
-  const user = { name: (platformUser?.email || "").split("@")[0].charAt(0).toUpperCase() + (platformUser?.email || "").split("@")[0].slice(1), email: platformUser?.email || "", role: isAdmin ? "admin" : "staff" };
+  const isAdminUser2 = ADMIN_EMAILS.includes(platformUser?.email || "");
+  const user = { name: (platformUser?.email || "").split("@")[0].charAt(0).toUpperCase() + (platformUser?.email || "").split("@")[0].slice(1), email: platformUser?.email || "", role: isAdminUser2 ? "admin" : "staff" };
   const [loggedIn,   setLoggedIn]   = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass,  setLoginPass]  = useState("");
@@ -544,7 +544,7 @@ function StaffTaskManager({ platformUser }) {
   const today = new Date().toISOString().split("T")[0];
   const dow = new Date().getDay(); // 0=Sun,1=Mon,...5=Fri,6=Sat
   const dom = new Date().getDate();
-  const isAdmin = user?.role === "admin";
+  const staffIsAdmin = user?.role === "admin";
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),3500); };
 
   const doLogin = () => {};
@@ -661,7 +661,7 @@ function StaffTaskManager({ platformUser }) {
         </div>
         <div style={{marginLeft:"auto", display:"flex", gap:8}}>
           <button onClick={()=>setView("today")} style={{...s.btn(view==="today"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📋 My Tasks</button>
-          {isAdmin && <button onClick={()=>setView("report")} style={{...s.btn(view==="report"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📊 Team Report</button>}
+          {staffIsAdmin && <button onClick={()=>setView("report")} style={{...s.btn(view==="report"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📊 Team Report</button>}
 
         </div>
       </div>
@@ -741,7 +741,7 @@ function StaffTaskManager({ platformUser }) {
         )}
 
         {/* TEAM REPORT - Admin only */}
-        {view==="report" && isAdmin && (
+        {view==="report" && staffIsAdmin && (
           <>
             <div style={{fontWeight:700, fontSize:16, marginBottom:6}}>Team Performance — Last 7 Days</div>
             <div style={{fontSize:12, color:"#6B7EB8", marginBottom:20}}>Green = all done · Yellow = partial · Red = not done · — = no tasks that day</div>
