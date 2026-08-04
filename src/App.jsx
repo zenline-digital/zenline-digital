@@ -189,6 +189,14 @@ function SEO() {
   const [gscActions, setGscActions]       = useState("");
   const [gscLoading, setGscLoading]       = useState(false);
   const [openSection, setOpenSection]     = useState("backlink");
+  const [competitorUrl, setCompetitorUrl] = useState("");
+  const [competitorData, setCompetitorData] = useState(null);
+  const [competitorLoading, setCompetitorLoading] = useState(false);
+  const [googleIndexingKey, setGoogleIndexingKey] = useState("");
+  const [brokenLinks, setBrokenLinks] = useState([]);
+  const [brokenLoading, setBrokenLoading] = useState(false);
+  const [altLoading, setAltLoading] = useState(false);
+  const [altResults, setAltResults] = useState([]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
 
@@ -237,9 +245,9 @@ function SEO() {
     setSaving(true);
     try {
       await sbFetch(`/rest/v1/seo_automation?id=eq.${config.id}`, "PATCH", {
-        wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus, google_api_key: googleApiKey,
+        wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus, google_api_key: googleApiKey, google_indexing_key: googleIndexingKey,
       });
-      setConfig(prev => ({ ...prev, wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus, google_api_key: googleApiKey }));
+      setConfig(prev => ({ ...prev, wp_url: wpUrl, wp_username: wpUser, wp_app_password: wpPass, post_status: postStatus, google_api_key: googleApiKey, google_indexing_key: googleIndexingKey }));
       setShowSettings(false);
       showToast("✅ Settings saved");
     } catch (e) { showToast("❌ " + e.message); }
@@ -444,6 +452,71 @@ What to do: One clear sentence.
     finally { setGscLoading(false); }
   };
 
+  const analyzeCompetitor = async () => {
+    if (!competitorUrl.trim()) { showToast("Enter a competitor URL first"); return; }
+    setCompetitorLoading(true); setCompetitorData(null);
+    try {
+      const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1200,
+          system: "You are an SEO competitor analyst for UAE e-commerce brands.",
+          messages: [{ role: "user", content: `Analyse this competitor of THUGFIT (UAE gym activewear, thugfit.ae): ${competitorUrl}
+
+Based on what you know about the UAE fitness market and typical e-commerce SEO strategies:
+
+1. List 10 keywords they likely rank for that THUGFIT should target
+2. List 5 content gaps — topics they cover that THUGFIT should also cover
+3. List 3 backlink strategies THUGFIT should copy from them
+4. Give an overall strategy recommendation in 2 sentences
+
+Return as JSON only:
+{"keywords":["kw1","kw2"],"content_gaps":["gap1"],"backlink_strategies":["s1"],"recommendation":"text"}` }] }) });
+      const data = await res.json();
+      const parsed = JSON.parse(data.content[0].text.replace(/\`\`\`json|\`\`\`/g, "").trim());
+      setCompetitorData(parsed);
+      // Add competitor keywords to queue
+      if (parsed.keywords?.length > 0) {
+        await Promise.all(parsed.keywords.map(kw => sbFetch("/rest/v1/seo_keyword_queue", "POST", { keyword: kw, used: false, priority: 7 }).catch(() => {})));
+        showToast(`✅ Analysis done — ${parsed.keywords.length} keywords added to your queue`);
+      }
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setCompetitorLoading(false); }
+  };
+
+  const checkBrokenLinks = async () => {
+    if (!config?.wp_username || !config?.wp_app_password) { showToast("⚠ Add WordPress credentials in Settings first"); return; }
+    setBrokenLoading(true); setBrokenLinks([]);
+    try {
+      const wpBase = config.wp_url || "https://thugfit.ae";
+      const creds = btoa(`${config.wp_username}:${config.wp_app_password}`);
+      const r = await fetch(`${wpBase}/wp-json/wp/v2/posts?per_page=15&status=publish`, { headers: { Authorization: `Basic ${creds}` } });
+      const posts = await r.json();
+      const found = [];
+      for (const post of (Array.isArray(posts) ? posts.slice(0, 8) : [])) {
+        const links = [...(post.content?.rendered || "").matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).slice(0, 8);
+        for (const link of links) {
+          try {
+            const check = await fetch(link, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+            if (check.status === 404 || check.status === 410) found.push({ post: post.title?.rendered, link, status: check.status });
+          } catch { found.push({ post: post.title?.rendered, link, status: "unreachable" }); }
+        }
+      }
+      setBrokenLinks(found);
+      showToast(found.length === 0 ? "✅ No broken links found!" : `⚠ Found ${found.length} broken links`);
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setBrokenLoading(false); }
+  };
+
+  const triggerAltTags = async () => {
+    if (!config?.wp_username || !config?.wp_app_password) { showToast("⚠ Add WordPress credentials in Settings first"); return; }
+    setAltLoading(true); setAltResults([]);
+    try {
+      const res = await fetch("/api/seo-cron", { method: "POST", headers: { "Content-Type": "application/json", "x-vercel-cron": "1", "x-task": "alt_tags" } });
+      showToast("✅ Alt tag job triggered — runs in background, check activity log");
+      setAltResults(["Alt tag generation triggered — results appear in Activity Log in 1-2 minutes"]);
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setAltLoading(false); }
+  };
+
   const copyText = (text) => { navigator.clipboard.writeText(text); showToast("✅ Copied to clipboard"); };
 
   const scoreColor = (s) => s >= 90 ? "#4ade80" : s >= 50 ? "#fb923c" : "#f87171";
@@ -520,6 +593,11 @@ What to do: One clear sentence.
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Google API Key <span style={{ color: "#fb923c", fontWeight: 400, fontSize: 10, textTransform: "none" }}>(required for Page Speed checker)</span></label>
               <input type="password" value={googleApiKey} onChange={e => setGoogleApiKey(e.target.value)} placeholder="AIza..." style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} />
               <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 5 }}>Get free key → console.cloud.google.com → APIs &amp; Services → Credentials → Create API Key → then enable "PageSpeed Insights API"</div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Google Indexing API Key <span style={{ color: "#3a3a5c", fontWeight: 400, fontSize: 10, textTransform: "none" }}>(optional — fast-tracks new articles into Google)</span></label>
+              <textarea value={googleIndexingKey} onChange={e => setGoogleIndexingKey(e.target.value)} rows={3} placeholder='Paste the full service account JSON here ({"type":"service_account","project_id":...})' style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 11, outline: "none", resize: "vertical", fontFamily: "monospace" }} />
+              <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 5 }}>console.cloud.google.com → IAM → Service Accounts → Create → Grant "Indexing API" role → Keys → Add Key → JSON → paste here</div>
             </div>
             <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Publish Articles As</label>
               <select value={postStatus} onChange={e => setPostStatus(e.target.value)} style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }}>
@@ -792,6 +870,84 @@ What to do: One clear sentence.
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── COMPETITOR ANALYSIS ──────────────────────────────────────── */}
+            {sectionBtn("competitor", "Competitor Keyword Analysis", "🔎")}
+            {openSection === "competitor" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>Enter a competitor's website URL. The AI will identify keywords they rank for, content gaps, and backlink strategies THUGFIT should copy. Found keywords are automatically added to your article queue.</div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Competitor Website URL</label>
+                    <input value={competitorUrl} onChange={e => setCompetitorUrl(e.target.value)} placeholder="https://competitor.ae" style={{ width: "100%", background: "#0d0d16", border: "1px solid #1e1e30", color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none" }} />
+                  </div>
+                  <button onClick={analyzeCompetitor} disabled={competitorLoading || !competitorUrl.trim()} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 8 }}>
+                    {competitorLoading ? <><SeoSpinner size={14} /> Analysing…</> : "🔎 Analyse Competitor"}
+                  </button>
+                </div>
+                {competitorData && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 16 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "#a78bfa", marginBottom: 10 }}>🔑 Keywords added to your queue ({competitorData.keywords?.length})</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{competitorData.keywords?.map((kw, i) => <span key={i} style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "3px 10px", borderRadius: 20, fontSize: 11 }}>{kw}</span>)}</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 14 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "#4ade80", marginBottom: 8 }}>📝 Content Gaps to Fill</div>
+                        {competitorData.content_gaps?.map((g, i) => <div key={i} style={{ fontSize: 12, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e1e30" }}>{i+1}. {g}</div>)}
+                      </div>
+                      <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 14 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "#fb923c", marginBottom: 8 }}>🔗 Backlink Strategies to Copy</div>
+                        {competitorData.backlink_strategies?.map((s, i) => <div key={i} style={{ fontSize: 12, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e1e30" }}>{i+1}. {s}</div>)}
+                      </div>
+                    </div>
+                    {competitorData.recommendation && (
+                      <div style={{ background: "#16a34a10", border: "1px solid #16a34a30", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#4ade80" }}>💡 {competitorData.recommendation}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── BROKEN LINKS ──────────────────────────────────────────────── */}
+            {sectionBtn("broken", "Broken Link Checker", "🔗")}
+            {openSection === "broken" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>Scans your published blog posts for broken links (404 errors). Broken links hurt SEO. Staff fixes them in WordPress by editing the post and removing or replacing the broken link.</div>
+                <button onClick={checkBrokenLinks} disabled={brokenLoading} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  {brokenLoading ? <><SeoSpinner size={14} /> Scanning…</> : "🔍 Scan for Broken Links"}
+                </button>
+                {brokenLinks.length === 0 && !brokenLoading && <div style={{ fontSize: 12, color: "#3a3a5c", textAlign: "center", padding: "16px 0" }}>Click scan to check your posts</div>}
+                {brokenLinks.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 12, color: "#f87171", marginBottom: 10, fontWeight: 700 }}>⚠ {brokenLinks.length} broken link{brokenLinks.length !== 1 ? "s" : ""} found — fix these in WordPress:</div>
+                    {brokenLinks.map((b, i) => (
+                      <div key={i} style={{ background: "#0d0d16", border: "1px solid #ef444430", borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>In post: <strong style={{ color: "#e2e8f0" }}>{b.post}</strong></div>
+                        <div style={{ fontSize: 12, color: "#f87171", marginBottom: 4, wordBreak: "break-all" }}>{b.link}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171" }}>Status: {b.status}</div>
+                        <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 4 }}>Fix: WordPress → Posts → Edit "{b.post}" → find this link → remove or update it</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── IMAGE ALT TAGS ────────────────────────────────────────────── */}
+            {sectionBtn("alttags", "Image Alt Tags (Auto)", "🖼️")}
+            {openSection === "alttags" && (
+              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12, lineHeight: 1.6 }}>All your WooCommerce product images need descriptive alt text for Google Images SEO. This runs automatically every 1st of the month. You can also trigger it manually now.</div>
+                <div style={{ background: "#16a34a10", border: "1px solid #16a34a30", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#4ade80" }}>
+                  ✅ Runs automatically on the 1st of every month via the daily cron job. No staff action needed.
+                </div>
+                <button onClick={triggerAltTags} disabled={altLoading} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+                  {altLoading ? <><SeoSpinner size={14} /> Triggering…</> : "🖼️ Run Alt Tags Now"}
+                </button>
+                {altResults.length > 0 && <div style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>{altResults[0]}</div>}
               </div>
             )}
 
