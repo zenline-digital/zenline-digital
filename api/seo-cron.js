@@ -352,9 +352,14 @@ export default async function handler(req, res) {
 
   try {
     // 1. Load config
-    const configs=await sbGet("/rest/v1/seo_automation?order=created_at.asc&limit=1",supaKey);
+    let rawConfigResp;
+    try {
+      const u=new URL(SUPABASE_URL+"/rest/v1/seo_automation?order=created_at.asc&limit=1");
+      rawConfigResp=await httpsGet(u.hostname,u.pathname+u.search,sbH(supaKey));
+    } catch(e){ rawConfigResp={error:e.message}; }
+    const configs=Array.isArray(rawConfigResp?.body)?rawConfigResp.body:[];
     const config=configs[0];
-    if(!config) return res.status(200).json({skipped:true,reason:"No config found — set up in ZenLine Digital Auto SEO"});
+    if(!config) return res.status(200).json({skipped:true,reason:"No config found — set up in ZenLine Digital Auto SEO",debug:{supaKeyLength:supaKey.length,supaKeyStart:supaKey.slice(0,20),rawStatus:rawConfigResp?.status,rawBody:JSON.stringify(rawConfigResp?.body).slice(0,300)}});
     if(!config.is_enabled) return res.status(200).json({skipped:true,reason:"Automation is paused"});
     if(!config.wp_username||!config.wp_app_password) {
       await logActivity(supaKey,{action:"error",status:"failed",error:"WordPress credentials missing"});
