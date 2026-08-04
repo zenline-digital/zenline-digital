@@ -6,7 +6,6 @@ import https from "https";
 
 const SUPABASE_URL = "https://ioniqxioapcdgenpksex.supabase.co";
 
-// ─── HTTP ────────────────────────────────────────────────────────────────────
 function httpsRequest(method, hostname, path, headers, body) {
   return new Promise((resolve, reject) => {
     const bodyStr = body ? (typeof body === "string" ? body : JSON.stringify(body)) : null;
@@ -36,7 +35,7 @@ async function callClaude(apiKey, system, prompt, maxTokens=3000) {
     {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
     {model:"claude-sonnet-4-6",max_tokens:maxTokens,system,messages:[{role:"user",content:prompt}]}
   );
-  if(r.status!==200) throw new Error(`Claude ${r.status}`);
+  if(r.status!==200) throw new Error(`Claude ${r.status}: ${JSON.stringify(r.body).slice(0,200)}`);
   return r.body.content[0].text;
 }
 
@@ -60,14 +59,12 @@ const SEED_KEYWORDS = [
   "UAE fitness fashion brand","best leggings for gym UAE","gym clothes online Dubai",
 ];
 
-// UAE activewear competitor list (auto-analysed monthly, no staff input needed)
 const UAE_COMPETITORS = [
-  "https://www.gymshark.com", "https://www.fabletics.com",
-  "https://www.lululemon.com", "https://www.under-armour.ae",
-  "https://www.nike.com/ae",  "https://www.adidas.ae",
+  "https://www.gymshark.com","https://www.fabletics.com",
+  "https://www.lululemon.com","https://www.nike.com/ae",
+  "https://www.adidas.ae","https://www.underarmour.com",
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const logActivity = (k,e) => sbPost("/rest/v1/seo_activity_log",e,k).catch(()=>{});
 const addStaffTask = (k,t) => sbPost("/rest/v1/seo_staff_tasks",t,k).catch(()=>{});
 
@@ -161,11 +158,11 @@ async function submitGoogleIndexing(serviceKeyJson, postUrl) {
     const tok=await httpsPost("oauth2.googleapis.com","/token",{"Content-Type":"application/x-www-form-urlencoded"},`grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`);
     if(!tok.body?.access_token) return "Indexing API: no token";
     const res=await httpsPost("indexing.googleapis.com","/v3/urlNotifications:publish",{"Content-Type":"application/json",Authorization:`Bearer ${tok.body.access_token}`},{url:postUrl,type:"URL_UPDATED"});
-    return res.status===200 ? `✓ Submitted to Google: ${postUrl}` : `Indexing API error: ${res.status}`;
+    return res.status===200 ? `Submitted to Google: ${postUrl}` : `Indexing API error: ${res.status}`;
   } catch(e) { return `Indexing API: ${e.message}`; }
 }
 
-// ─── Get product links ────────────────────────────────────────────────────────
+// ─── Get product links for internal linking ───────────────────────────────────
 async function getProductLinks(config) {
   try {
     const r=await wpGet(config.wp_url,"wc/v3/products?per_page=15&status=publish",config.wp_username,config.wp_app_password);
@@ -186,7 +183,7 @@ async function applyAltTags(config, apiKey) {
       const alts=(await callClaude(apiKey,"Write concise SEO alt text for UAE activewear product images. Plain text only, one per line, no numbering.",`Product: "${p.name}" — THUGFIT UAE activewear. Write ${p.images.length} alt text(s), one per line, max 120 chars each.`,300)).trim().split("\n").filter(Boolean);
       const imgs=p.images.map((img,i)=>({...img,alt:alts[i]||`${p.name} - THUGFIT UAE activewear`}));
       await wpPut(config.wp_url,`wc/v3/products/${p.id}`,{images:imgs},config.wp_username,config.wp_app_password);
-      results.push(`${p.name}: ✓ alt tags applied`);
+      results.push(`${p.name}: alt tags applied`);
     }
   } catch(e) { results.push(`Error: ${e.message}`); }
   return results;
@@ -199,11 +196,11 @@ async function applySchema(config) {
     const r=await wpGet(config.wp_url,"wc/v3/products?per_page=20&status=publish",config.wp_username,config.wp_app_password);
     if(!Array.isArray(r.body)) return ["Could not fetch products"];
     for(const p of r.body.slice(0,10)) {
-      const schema=JSON.stringify({"@context":"https://schema.org/","@type":"Product",name:p.name,description:p.description?.replace(/<[^>]*>/g,"").slice(0,300)||p.name,brand:{"@type":"Brand",name:"THUGFIT"},offers:{"@type":"Offer",url:p.permalink||`${config.wp_url}/product/${p.slug}`,priceCurrency:"AED",price:p.price||"0",availability:p.stock_status==="instock"?"https://schema.org/InStock":"https://schema.org/OutOfStock",seller:{"@type":"Organization",name:"THUGFIT"}},image:p.images?.[0]?.src||""});
+      const schema=JSON.stringify({"@context":"https://schema.org/","@type":"Product",name:p.name,description:(p.description||p.name).replace(/<[^>]*>/g,"").slice(0,300),brand:{"@type":"Brand",name:"THUGFIT"},offers:{"@type":"Offer",url:p.permalink||`${config.wp_url}/product/${p.slug}`,priceCurrency:"AED",price:p.price||"0",availability:p.stock_status==="instock"?"https://schema.org/InStock":"https://schema.org/OutOfStock",seller:{"@type":"Organization",name:"THUGFIT"}},image:p.images?.[0]?.src||""});
       const curr=p.description||"";
       if(!curr.includes("application/ld+json")) {
-        await wpPut(config.wp_url,`wc/v3/products/${p.id}`,{description:curr+`\n<script type="application/ld+json">${schema}</script>`},config.wp_username,config.wp_app_password);
-        results.push(`${p.name}: ✓ schema applied`);
+        await wpPut(config.wp_url,`wc/v3/products/${p.id}`,{description:curr+`\n<script type="application/ld+json">${schema}<\/script>`},config.wp_username,config.wp_app_password);
+        results.push(`${p.name}: schema applied`);
       } else results.push(`${p.name}: schema already present`);
     }
   } catch(e) { results.push(`Error: ${e.message}`); }
@@ -230,9 +227,9 @@ async function monitor404(config, supaKey) {
           errors.push({type:item.type,title:item.title,url:item.url,status:r.status});
           await addStaffTask(supaKey,{type:"404_error",description:`${item.type}: "${item.title}" returns ${r.status}`,url:item.url,resolved:false});
         }
-      } catch { /* skip unreachable */ }
+      } catch { }
     }
-  } catch(e) { /* silent */ }
+  } catch { }
   return errors;
 }
 
@@ -252,10 +249,10 @@ async function checkBrokenLinks(config, supaKey) {
             broken.push({post:post.title?.rendered,link,status:res.status});
             await addStaffTask(supaKey,{type:"broken_link",description:`Broken link in "${post.title?.rendered}": ${link} (${res.status})`,url:link,resolved:false});
           }
-        } catch { /* skip */ }
+        } catch { }
       }
     }
-  } catch { /* silent */ }
+  } catch { }
   return broken;
 }
 
@@ -267,12 +264,10 @@ async function checkDuplicateContent(config, apiKey, supaKey) {
     const titles=r.body.map(p=>({id:p.id,title:p.title?.rendered,url:p.link}));
     const result=await callClaude(apiKey,
       "You are an SEO content auditor. Check for duplicate or very similar content topics.",
-      `These are blog posts on thugfit.ae. Identify any that cover nearly the same topic (would compete with each other in Google):
+      `These are blog posts on thugfit.ae. Identify any that cover nearly the same topic:
 ${titles.map((t,i)=>`${i+1}. ${t.title}`).join("\n")}
-
-Return JSON only: {"duplicates":[{"titles":["title1","title2"],"reason":"why they overlap","recommendation":"what to do"}]}
-If no duplicates found return: {"duplicates":[]}`,
-      800
+Return JSON only: {"duplicates":[{"titles":["title1","title2"],"recommendation":"what to do"}]}
+If none: {"duplicates":[]}`,800
     );
     const parsed=JSON.parse(result.replace(/```json|```/g,"").trim());
     if(parsed.duplicates?.length>0) {
@@ -285,71 +280,84 @@ If no duplicates found return: {"duplicates":[]}`,
   } catch(e) { return `Duplicate check error: ${e.message}`; }
 }
 
-// ─── Auto competitor analysis (no staff input needed) ─────────────────────────
+// ─── Auto competitor analysis ─────────────────────────────────────────────────
 async function autoCompetitorAnalysis(apiKey, supaKey) {
   try {
-    const competitor=UAE_COMPETITORS[new Date().getDate() % UAE_COMPETITORS.length];
+    const competitor=UAE_COMPETITORS[new Date().getDate()%UAE_COMPETITORS.length];
     const result=await callClaude(apiKey,
-      "You are an SEO competitor analyst for UAE activewear e-commerce.",
+      "SEO competitor analyst for UAE activewear e-commerce.",
       `Analyse ${competitor} as a competitor of THUGFIT (thugfit.ae, UAE gym activewear).
-Identify 10 keywords they likely rank for that THUGFIT should target in the UAE market.
-Return JSON only: {"competitor":"${competitor}","keywords":["kw1","kw2",...10 keywords]}`,
-      500
+Identify 10 keywords they likely rank for that THUGFIT should target in UAE.
+Return JSON only: {"competitor":"${competitor}","keywords":["kw1","kw2"]}`,500
     );
     const parsed=JSON.parse(result.replace(/```json|```/g,"").trim());
     if(Array.isArray(parsed.keywords)&&parsed.keywords.length>0) {
       await Promise.all(parsed.keywords.map(kw=>sbPost("/rest/v1/seo_keyword_queue",{keyword:kw,used:false,priority:6},supaKey).catch(()=>{})));
-      return `Auto competitor analysis: ${parsed.keywords.length} keywords from ${parsed.competitor} added to queue`;
+      return `${parsed.keywords.length} keywords from ${parsed.competitor} added to queue`;
     }
     return "Competitor analysis: no keywords extracted";
   } catch(e) { return `Competitor error: ${e.message}`; }
 }
 
-// ─── Google Business Profile post ─────────────────────────────────────────────
+// ─── Google Business Profile post ────────────────────────────────────────────
 async function postToGoogleBusiness(config, apiKey) {
   if(!config.gbp_access_token||!config.gbp_location_id) return "GBP: not configured";
   try {
     const text=await callClaude(apiKey,
-      "Write a short Google Business Profile post for a UAE gym activewear brand. Under 300 words. Motivational, professional.",
-      "Write a Google Business Profile weekly update post for THUGFIT (premium UAE gym activewear, thugfit.ae). Include a call to action to visit thugfit.ae. No hashtags. Plain text only.",
-      400
+      "Write a short Google Business Profile post for THUGFIT UAE gym activewear. Under 250 words. No hashtags.",
+      "Write a Google Business Profile weekly update for THUGFIT (premium UAE gym activewear, thugfit.ae). Motivational, professional, ends with CTA to visit thugfit.ae.",400
     );
     const r=await httpsPost("mybusinessposts.googleapis.com",
       `/v1/${config.gbp_location_id}/localPosts`,
       {"Content-Type":"application/json",Authorization:`Bearer ${config.gbp_access_token}`},
       {languageCode:"en-US",summary:text.slice(0,1500),callToAction:{actionType:"SHOP",url:"https://thugfit.ae"},topicType:"STANDARD"}
     );
-    return r.status===200||r.status===201 ? "✓ Google Business Profile post published" : `GBP error: ${r.status}`;
+    return r.status===200||r.status===201 ? "GBP post published" : `GBP error: ${r.status}`;
   } catch(e) { return `GBP error: ${e.message}`; }
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  const isVercelCron=req.headers["x-vercel-cron"]==="1";
-  const secret=process.env.CRON_SECRET||"";
-  const auth=req.headers.authorization||"";
-  const isManual=secret ? auth===`Bearer ${secret}` : true;
+  const isVercelCron = req.headers["x-vercel-cron"]==="1";
+  const secret = process.env.CRON_SECRET||"";
+  const auth = req.headers.authorization||"";
+  const isManual = secret ? auth===`Bearer ${secret}` : true;
   if(!isVercelCron&&!isManual&&process.env.NODE_ENV!=="development")
     return res.status(401).json({error:"Unauthorized"});
 
-  const supaKey=process.env.SUPABASE_SERVICE_KEY||process.env.VITE_SUPABASE_ANON_KEY||"";
-  const anthropicKey=process.env.ANTHROPIC_API_KEY||"";
-  if(!supaKey||!anthropicKey) return res.status(500).json({error:"Missing env vars"});
+  // Support both VITE_ and non-VITE_ key names
+  const supaKey = process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_ANON_KEY
+    || process.env.VITE_SUPABASE_ANON_KEY
+    || "";
+  const anthropicKey = process.env.ANTHROPIC_API_KEY||"";
+
+  if(!supaKey||!anthropicKey) {
+    return res.status(500).json({
+      error:"Missing env vars",
+      found:{
+        SUPABASE_SERVICE_KEY:!!process.env.SUPABASE_SERVICE_KEY,
+        SUPABASE_ANON_KEY:!!process.env.SUPABASE_ANON_KEY,
+        VITE_SUPABASE_ANON_KEY:!!process.env.VITE_SUPABASE_ANON_KEY,
+        ANTHROPIC_API_KEY:!!process.env.ANTHROPIC_API_KEY,
+      }
+    });
+  }
 
   const report={};
   const today=new Date();
-  const dayOfWeek=today.getDay();   // 0=Sun, 1=Mon
-  const dayOfMonth=today.getDate(); // 1-31
+  const dayOfWeek=today.getDay();
+  const dayOfMonth=today.getDate();
 
   try {
     // 1. Load config
     const configs=await sbGet("/rest/v1/seo_automation?limit=1",supaKey);
     const config=configs[0];
-    if(!config) return res.status(200).json({skipped:true,reason:"No config"});
-    if(!config.is_enabled) return res.status(200).json({skipped:true,reason:"Automation paused"});
+    if(!config) return res.status(200).json({skipped:true,reason:"No config found — set up in ZenLine Digital Auto SEO"});
+    if(!config.is_enabled) return res.status(200).json({skipped:true,reason:"Automation is paused"});
     if(!config.wp_username||!config.wp_app_password) {
       await logActivity(supaKey,{action:"error",status:"failed",error:"WordPress credentials missing"});
-      return res.status(200).json({skipped:true,reason:"WordPress credentials missing"});
+      return res.status(200).json({skipped:true,reason:"WordPress credentials missing — add in Auto SEO Settings"});
     }
 
     // 2. Pick keyword
@@ -360,27 +368,31 @@ export default async function handler(req, res) {
 
     // 3. Get product links for internal linking
     const productLinks=await getProductLinks(config);
+    report.internalLinks=`${productLinks.length} product links available`;
 
-    // 4. Generate + publish article
+    // 4. Generate article
     const article=await generateArticle(anthropicKey,keyword,productLinks.slice(0,5));
+
+    // 5. Publish to WordPress (with Yoast + Rank Math meta)
+    const siteUrl=config.wp_url||"https://thugfit.ae";
     const wpResult=await publishArticle(config,article);
     const success=wpResult.status===201;
     const wpPostId=wpResult.body?.id;
     const wpPostUrl=wpResult.body?.link||wpResult.body?.guid?.rendered;
     report.article={success,title:article.title,keyword,wpPostUrl};
 
-    // 5. Ping Google + Bing
-    report.ping=await pingSearchEngines(config.wp_url||"https://thugfit.ae");
+    // 6. Ping Google + Bing
+    report.ping=await pingSearchEngines(siteUrl);
 
-    // 6. Google Indexing API
+    // 7. Google Indexing API (if configured)
     if(config.google_indexing_key&&wpPostUrl) {
       report.indexing=await submitGoogleIndexing(config.google_indexing_key,wpPostUrl);
     }
 
-    // 7. Mark keyword used
+    // 8. Mark keyword used
     if(kwId) await sbPatch(`/rest/v1/seo_keyword_queue?id=eq.${kwId}`,{used:true,used_at:new Date().toISOString()},supaKey);
 
-    // 8. Log main activity
+    // 9. Log activity
     await logActivity(supaKey,{
       action:"blog_published",title:article.title,keyword,
       status:success?(config.post_status==="publish"?"published":"saved as draft"):"failed",
@@ -388,22 +400,19 @@ export default async function handler(req, res) {
       error:success?null:`WP ${wpResult.status}: ${JSON.stringify(wpResult.body).slice(0,200)}`,
     });
 
-    // 9. Update last_run
+    // 10. Update last_run
     await sbPatch("/rest/v1/seo_automation?limit=1",{last_run:new Date().toISOString()},supaKey);
 
     // ── WEEKLY (Monday) ───────────────────────────────────────────────────────
     if(dayOfWeek===1) {
-      // Broken link check — logs to staff tasks if found
       const broken=await checkBrokenLinks(config,supaKey);
-      report.brokenLinks=`${broken.length} broken links found${broken.length>0?" — added to staff tasks":""}`;
+      report.brokenLinks=`${broken.length} broken links found`;
       await logActivity(supaKey,{action:"broken_link_check",status:broken.length>0?"issues_found":"ok",error:broken.length>0?JSON.stringify(broken).slice(0,400):null});
 
-      // 404 monitor — logs to staff tasks if found
       const errors404=await monitor404(config,supaKey);
-      report.monitor404=`${errors404.length} 404 errors found${errors404.length>0?" — added to staff tasks":""}`;
+      report.monitor404=`${errors404.length} 404 errors found`;
       await logActivity(supaKey,{action:"404_monitor",status:errors404.length>0?"issues_found":"ok",error:errors404.length>0?JSON.stringify(errors404).slice(0,400):null});
 
-      // Google Business Profile post (if configured)
       if(config.gbp_access_token) {
         report.gbp=await postToGoogleBusiness(config,anthropicKey);
         await logActivity(supaKey,{action:"gbp_post",status:"completed",error:report.gbp});
@@ -412,21 +421,17 @@ export default async function handler(req, res) {
 
     // ── MONTHLY (1st of month) ────────────────────────────────────────────────
     if(dayOfMonth===1) {
-      // Image alt tags
       const altResults=await applyAltTags(config,anthropicKey);
       await logActivity(supaKey,{action:"alt_tags",status:"completed",error:altResults.join(" | ").slice(0,500)});
       report.altTags=altResults;
 
-      // Schema markup
       const schemaResults=await applySchema(config);
       await logActivity(supaKey,{action:"schema_markup",status:"completed",error:schemaResults.join(" | ").slice(0,500)});
       report.schema=schemaResults;
 
-      // Duplicate content check — logs to staff tasks if found
       report.duplicates=await checkDuplicateContent(config,anthropicKey,supaKey);
       await logActivity(supaKey,{action:"duplicate_check",status:"completed",error:report.duplicates});
 
-      // Auto competitor analysis — adds keywords to queue automatically
       report.competitor=await autoCompetitorAnalysis(anthropicKey,supaKey);
       await logActivity(supaKey,{action:"competitor_analysis",status:"completed",error:report.competitor});
     }
