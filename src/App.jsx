@@ -137,21 +137,65 @@ function GBPSection({ showToast, config }) {
   const [oauthConnected, setOauthConnected]   = useState(!!localStorage.getItem("gbp_access_token"));
 
   const TOPIC_OPTIONS = [
-    { value: "weekly_promo",    label: "Weekly Promotion"         },
-    { value: "new_arrivals",    label: "New Arrivals"             },
-    { value: "train_earn",      label: "Train & Earn Programme"   },
-    { value: "workout_tip",     label: "Workout Tip"              },
-    { value: "uae_fitness",     label: "UAE Fitness Lifestyle"    },
-    { value: "product_feature", label: "Product Feature"          },
+    { value: "weekly_promo",  label: "Weekly Promotion + Sale"      },
+    { value: "new_arrivals",  label: "New Arrivals"                 },
+    { value: "train_earn",    label: "Train & Earn Programme"       },
+    { value: "workout_tip",   label: "Workout Tip + Product"        },
+    { value: "bestsellers",   label: "Bestselling Products"         },
+    { value: "gcc_shipping",  label: "GCC Shipping (Saudi/Kuwait)"  },
   ];
 
+  const BRAND_CONTEXT = `
+THUGFIT — Premium UAE Gym Activewear | thugfit.ae
+Founded: 2026 | Based: Dubai, UAE
+Customers: 282+ across UAE and GCC (Dubai 43%, Saudi Arabia 12%, Abu Dhabi 9%, Sharjah 5%, + Kuwait, Oman, Qatar, Bahrain)
+Orders: 301 total | Average order: AED 115 | July revenue: AED 18,352 (40% growth from June)
+
+TOP SELLING PRODUCTS:
+- Fitflex Mens Shorts Green — AED 111 (bestseller #1)
+- SprintHint 2-in-1 Shorts White — AED 102
+- AeroFit Long Line Sports Bra (Red/Blue/Light Green) — AED 116
+- SpinFit High Waist Leggings Green — AED 90
+- AgileAura Tank Top Sky Blue — AED 103
+- ActivePulse Shorts Black — AED 91
+- Airman Armor 3-in-1 Pack — combo deal
+
+CATEGORIES: Men's Shorts, Women's Sports Bras, Women's Leggings, Men's Tank Tops, Combos, Women's T-Shirts, Men's Hoodies
+
+ACTIVE PROMOTIONS:
+- 30% welcome discount auto-applied when new customer creates account (no code needed)
+- Sitewide sale — most products heavily discounted (original prices crossed out)
+- Free UAE shipping on orders above AED 300
+- Free GCC shipping on orders above AED 500
+- Train & Earn: members get unique code → their followers get 20% off → member earns commission + gets 40% VIP personal discount
+
+SHIPPING:
+- Dubai/Sharjah/Abu Dhabi: AED 25, next day
+- RAK/Fujairah: AED 30, 1-2 days
+- GCC: AED 30-45, 2-4 days
+- Same-day dispatch for orders before 12 PM Sun-Thu
+
+DO NOT MENTION: FunkyHues Performance-Stride Sports Bra Black or Leggings Black (out of stock)
+`;
+
   const TOPIC_PROMPTS = {
-    weekly_promo:    "a weekly promotional post highlighting THUGFIT activewear deals and encouraging UAE gym-goers to shop at thugfit.ae",
-    new_arrivals:    "a new arrivals announcement for THUGFIT UAE activewear, creating excitement and urgency to check thugfit.ae",
-    train_earn:      "the THUGFIT Train & Earn programme — UAE fitness professionals earn commission by sharing their unique code, audience gets 20% off, they get 40% VIP discount on personal orders. Apply at thugfit.ae/thugfit-train-earn",
-    workout_tip:     "a practical UAE-focused workout tip for gym-goers, naturally connecting to quality activewear from thugfit.ae",
-    uae_fitness:     "the UAE fitness lifestyle — Dubai gym culture, motivation, and premium activewear from thugfit.ae",
-    product_feature: "a specific THUGFIT product category (leggings, sports bras, shorts) with benefits for UAE climate and gym conditions",
+    weekly_promo: `${BRAND_CONTEXT}
+Write a Google Business Profile post about this week's THUGFIT promotions. Mention the 30% welcome discount for new accounts, sitewide sale prices, and free UAE shipping above AED 300. Reference 1-2 specific bestselling products with their real prices. Drive traffic to thugfit.ae.`,
+
+    new_arrivals: `${BRAND_CONTEXT}
+Write a Google Business Profile post announcing new arrivals at THUGFIT. Feature these new products: VelocityVibe Womens Pants, Whirlwind Womens T-Shirt, SpinFit High Waist Leggings, THUGFIT Sporty Mens Jacket, VitalVenture Athletic Mens Tank Top, StrikeZone Spaghetti Sports Bra. Mention they're on sale now. Link to thugfit.ae.`,
+
+    train_earn: `${BRAND_CONTEXT}
+Write a Google Business Profile post recruiting UAE fitness professionals to join THUGFIT Train & Earn programme. Key points: share your unique code → your followers get 20% off THUGFIT orders → you earn commission on every sale → plus you get 40% off your own personal orders. Apply at thugfit.ae/thugfit-train-earn. Target: personal trainers, gym coaches, fitness influencers.`,
+
+    workout_tip: `${BRAND_CONTEXT}
+Write a Google Business Profile post with a practical workout tip for UAE gym-goers (consider Dubai heat, indoor AC gyms, Ramadan fitness, summer training). Naturally connect the tip to wearing quality activewear from THUGFIT. Mention 1 relevant product (e.g. Fitflex Shorts for leg day, AeroFit Bra for cardio). Link to thugfit.ae.`,
+
+    bestsellers: `${BRAND_CONTEXT}
+Write a Google Business Profile post showcasing THUGFIT's bestselling products based on real sales data. Feature: Fitflex Mens Shorts (AED 111), AeroFit Long Line Sports Bra (AED 116), SpinFit Leggings (AED 90), SprintHint 2-in-1 Shorts (AED 102). These are proven bestsellers loved by UAE gym-goers. Mention the sitewide sale. Link to thugfit.ae.`,
+
+    gcc_shipping: `${BRAND_CONTEXT}
+Write a Google Business Profile post targeting GCC customers beyond Dubai — specifically Saudi Arabia, Kuwait, Oman, Qatar, Bahrain. Highlight that THUGFIT ships across GCC (AED 30-45, 2-4 days), free GCC shipping above AED 500. THUGFIT already has happy customers across 6 GCC countries. Drive traffic to thugfit.ae.`,
   };
 
   const generatePost = async () => {
@@ -162,17 +206,17 @@ function GBPSection({ showToast, config }) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-6", max_tokens: 600,
-          system: "You write Google Business Profile posts for THUGFIT, a premium UAE gym activewear brand. Posts are motivational, professional, and drive traffic to thugfit.ae. No hashtags. Max 300 words. End with a clear call to action.",
-          messages: [{ role: "user", content: `Write a Google Business Profile post about ${TOPIC_PROMPTS[postTopic]}.
+          system: "You write Google Business Profile posts for THUGFIT, a real UAE gym activewear brand with proven sales data. Use the exact product names, prices, and facts provided. Posts must feel authentic and specific — not generic. No hashtags. No markdown. Plain text only. Max 250 words.",
+          messages: [{ role: "user", content: `${TOPIC_PROMPTS[postTopic]}
 
-Requirements:
-- 150-250 words
-- Motivational and professional tone
-- UAE audience (mention Dubai/UAE naturally)
-- End with CTA linking to thugfit.ae
-- No hashtags (GBP doesn't support them well)
-- No markdown, plain text only
-- Start with a strong opening line, not "Welcome" or "Hello"` }]
+Additional requirements:
+- 150-250 words, plain text only
+- Use REAL product names and prices from the data above
+- Mention Dubai/UAE naturally
+- Start strong — not with "Welcome", "Hello", or "At THUGFIT"
+- End with a clear CTA and thugfit.ae link
+- No hashtags, no bullet points, no markdown
+- Sound like a real brand, not AI-generated` }]
         })
       });
       const data = await res.json();
