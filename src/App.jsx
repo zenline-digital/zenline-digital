@@ -38,7 +38,9 @@ const supa = {
       headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "return=representation,resolution=merge-duplicates" },
       body: JSON.stringify(body)
     });
-    return r.json();
+    const d = await r.json();
+    if (!r.ok) throw new Error(d?.message || `Supabase error ${r.status}`);
+    return d;
   }
 };
 
@@ -2431,11 +2433,13 @@ Return JSON only, no markdown:
   function Settings() {
     async function saveSettings() {
       try {
-        await supa.upsert("app_settings", { key: "gemini_key", value: geminiKey }, "key");
-        await supa.upsert("app_settings", { key: "brand_voice", value: brandVoice }, "key");
-        notify("Settings saved — Gemini key will persist after refresh");
+        const r1 = await supa.upsert("app_settings", { key: "gemini_key", value: geminiKey }, "key");
+        const r2 = await supa.upsert("app_settings", { key: "brand_voice", value: brandVoice }, "key");
+        if (r1?.error) throw new Error(r1.error.message);
+        if (r2?.error) throw new Error(r2.error.message);
+        notify("✅ Settings saved — will persist after refresh");
       } catch (e) {
-        notify("Settings saved locally (run SQL below to enable full persistence)", "warn");
+        notify("❌ Save failed: " + e.message, "err");
       }
     }
     return (
