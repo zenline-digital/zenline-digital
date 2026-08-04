@@ -1,12 +1,12 @@
-// api/seo-cron.js
-// Autonomous SEO Agent — runs daily at 9 AM UAE time (5 AM UTC)
-// Configure: "crons": [{"path": "/api/seo-cron", "schedule": "0 5 * * *"}]
+// api/seo-cron.js — Full SEO Automation Agent
+// Runs daily 9 AM UAE (0 5 * * *)
+// Weekly tasks: Monday | Monthly tasks: 1st of month
 
 import https from "https";
 
 const SUPABASE_URL = "https://ioniqxioapcdgenpksex.supabase.co";
 
-// ─── HTTP helpers ─────────────────────────────────────────────────────────────
+// ─── HTTP ────────────────────────────────────────────────────────────────────
 function httpsRequest(method, hostname, path, headers, body) {
   return new Promise((resolve, reject) => {
     const bodyStr = body ? (typeof body === "string" ? body : JSON.stringify(body)) : null;
@@ -19,47 +19,32 @@ function httpsRequest(method, hostname, path, headers, body) {
     req.end();
   });
 }
-const httpsGet   = (h, p, hd)    => httpsRequest("GET",   h, p, hd, null);
-const httpsPost  = (h, p, hd, b) => httpsRequest("POST",  h, p, hd, b);
-const httpsPatch = (h, p, hd, b) => httpsRequest("PATCH", h, p, hd, b);
-const httpsPut   = (h, p, hd, b) => httpsRequest("PUT",   h, p, hd, b);
+const httpsGet   = (h,p,hd)    => httpsRequest("GET",   h,p,hd,null);
+const httpsPost  = (h,p,hd,b)  => httpsRequest("POST",  h,p,hd,b);
+const httpsPatch = (h,p,hd,b)  => httpsRequest("PATCH", h,p,hd,b);
+const httpsPut   = (h,p,hd,b)  => httpsRequest("PUT",   h,p,hd,b);
 
 // ─── Supabase ─────────────────────────────────────────────────────────────────
-const sbH = k => ({ "Content-Type": "application/json", apikey: k, Authorization: `Bearer ${k}`, Prefer: "return=representation" });
-const sbGet   = async (path, k) => { const u = new URL(SUPABASE_URL + path); const r = await httpsGet(u.hostname, u.pathname + u.search, sbH(k)); return Array.isArray(r.body) ? r.body : []; };
-const sbPost  = async (path, b, k) => { const u = new URL(SUPABASE_URL + path); return httpsPost(u.hostname, u.pathname + u.search, sbH(k), b); };
-const sbPatch = async (path, b, k) => { const u = new URL(SUPABASE_URL + path); return httpsPatch(u.hostname, u.pathname + u.search, sbH(k), b); };
+const sbH = k => ({ "Content-Type":"application/json", apikey:k, Authorization:`Bearer ${k}`, Prefer:"return=representation" });
+const sbGet   = async(p,k) => { const u=new URL(SUPABASE_URL+p); const r=await httpsGet(u.hostname,u.pathname+u.search,sbH(k)); return Array.isArray(r.body)?r.body:[]; };
+const sbPost  = async(p,b,k) => { const u=new URL(SUPABASE_URL+p); return httpsPost(u.hostname,u.pathname+u.search,sbH(k),b); };
+const sbPatch = async(p,b,k) => { const u=new URL(SUPABASE_URL+p); return httpsPatch(u.hostname,u.pathname+u.search,sbH(k),b); };
 
 // ─── Claude ───────────────────────────────────────────────────────────────────
-async function callClaude(apiKey, system, prompt, maxTokens = 3500) {
-  const r = await httpsPost("api.anthropic.com", "/v1/messages",
-    { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-    { model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] }
+async function callClaude(apiKey, system, prompt, maxTokens=3000) {
+  const r = await httpsPost("api.anthropic.com","/v1/messages",
+    {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+    {model:"claude-sonnet-4-6",max_tokens:maxTokens,system,messages:[{role:"user",content:prompt}]}
   );
-  if (r.status !== 200) throw new Error(`Claude ${r.status}: ${JSON.stringify(r.body)}`);
+  if(r.status!==200) throw new Error(`Claude ${r.status}`);
   return r.body.content[0].text;
 }
 
-// ─── WordPress helpers ────────────────────────────────────────────────────────
-function wpHeaders(user, pass) {
-  return { "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}` };
-}
-async function wpGet(siteUrl, endpoint, user, pass) {
-  const u = new URL(`${siteUrl}/wp-json/${endpoint}`);
-  return httpsGet(u.hostname, u.pathname + u.search, wpHeaders(user, pass));
-}
-async function wpPost(siteUrl, endpoint, body, user, pass) {
-  const u = new URL(`${siteUrl}/wp-json/${endpoint}`);
-  return httpsPost(u.hostname, u.pathname, wpHeaders(user, pass), body);
-}
-async function wpPatch(siteUrl, endpoint, body, user, pass) {
-  const u = new URL(`${siteUrl}/wp-json/${endpoint}`);
-  return httpsPatch(u.hostname, u.pathname, wpHeaders(user, pass), body);
-}
-async function wpPut(siteUrl, endpoint, body, user, pass) {
-  const u = new URL(`${siteUrl}/wp-json/${endpoint}`);
-  return httpsPut(u.hostname, u.pathname, wpHeaders(user, pass), body);
-}
+// ─── WordPress ────────────────────────────────────────────────────────────────
+const wpH = (u,p) => ({"Content-Type":"application/json",Authorization:`Basic ${Buffer.from(`${u}:${p}`).toString("base64")}`});
+const wpGet  = (site,ep,u,p) => { const url=new URL(`${site}/wp-json/${ep}`); return httpsGet(url.hostname,url.pathname+url.search,wpH(u,p)); };
+const wpPost = (site,ep,b,u,p) => { const url=new URL(`${site}/wp-json/${ep}`); return httpsPost(url.hostname,url.pathname,wpH(u,p),b); };
+const wpPut  = (site,ep,b,u,p) => { const url=new URL(`${site}/wp-json/${ep}`); return httpsPut(url.hostname,url.pathname,wpH(u,p),b); };
 
 // ─── Seed keywords ────────────────────────────────────────────────────────────
 const SEED_KEYWORDS = [
@@ -75,350 +60,381 @@ const SEED_KEYWORDS = [
   "UAE fitness fashion brand","best leggings for gym UAE","gym clothes online Dubai",
 ];
 
+// UAE activewear competitor list (auto-analysed monthly, no staff input needed)
+const UAE_COMPETITORS = [
+  "https://www.gymshark.com", "https://www.fabletics.com",
+  "https://www.lululemon.com", "https://www.under-armour.ae",
+  "https://www.nike.com/ae",  "https://www.adidas.ae",
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const logActivity = (k,e) => sbPost("/rest/v1/seo_activity_log",e,k).catch(()=>{});
+const addStaffTask = (k,t) => sbPost("/rest/v1/seo_staff_tasks",t,k).catch(()=>{});
+
 // ─── Generate article ─────────────────────────────────────────────────────────
-async function generateArticle(apiKey, keyword, productLinks) {
-  // Build internal links block to inject naturally into article
-  const linksContext = productLinks.length > 0
-    ? `\nNaturally link to these THUGFIT product pages within the article body (use proper anchor text, 2-3 links max):\n${productLinks.map(p => `- ${p.name}: ${p.link}`).join("\n")}`
+async function generateArticle(apiKey, keyword, productLinks=[]) {
+  const linksCtx = productLinks.length>0
+    ? `\nNaturally link to 2-3 of these THUGFIT products within the article:\n${productLinks.map(p=>`- ${p.name}: ${p.link}`).join("\n")}`
     : "";
-
   const raw = await callClaude(apiKey,
-    "You are a professional SEO content writer for fitness and UAE market. THUGFIT brand voice: premium, motivational, confident. Write articles that rank on Google AND help readers.",
-    `Write a complete SEO-optimised blog article for THUGFIT (premium UAE activewear, thugfit.ae, Dubai).
+    "Professional SEO writer for UAE fitness market. THUGFIT brand: premium, motivational, confident.",
+    `Write a complete SEO blog article for THUGFIT (thugfit.ae, premium UAE activewear, Dubai).
+Target keyword: "${keyword}" | Length: 1200-1500 words | Audience: UAE fitness enthusiasts 18-35${linksCtx}
 
-Target keyword: "${keyword}"
-Length: 1200–1500 words
-Audience: UAE fitness enthusiasts 18-35${linksContext}
-
-FORMAT (follow exactly):
-SEO_TITLE: [max 60 chars, keyword included, ends with | THUGFIT]
-META_DESC: [max 155 chars, keyword + UAE + value prop]
+FORMAT:
+SEO_TITLE: [max 60 chars, keyword, ends | THUGFIT]
+META_DESC: [max 155 chars, keyword + UAE + value]
 SLUG: [kebab-case]
-FOCUS_KEYWORD: ${keyword}
 
 ---ARTICLE---
-# [H1 — punchy headline different from SEO title]
-
-[Intro — keyword in first 100 words]
-
+# [H1]
+[Intro - keyword in first 100 words]
 ## [H2]
 [~250 words]
-
 ## [H2]
 [~250 words]
-
 ## [H2]
 [~250 words]
-
 ## [H2]
 [~250 words]
-
 ## Frequently Asked Questions
-
-**Q: [relevant FAQ]**
-A: [2-3 sentences]
-
-**Q: [relevant FAQ]**
+**Q: [question]**
 A: [answer]
-
-**Q: [relevant FAQ]**
+**Q: [question]**
 A: [answer]
-
 ## Final Thoughts
-[100-150 words, natural THUGFIT mention, link to thugfit.ae, motivational CTA]`
+[100-150 words, THUGFIT mention, link to thugfit.ae]`
   );
-
-  const get = key => { const m = raw.match(new RegExp(`${key}:\\s*(.+)`)); return m ? m[1].trim() : ""; };
-  const bodyStart = raw.indexOf("---ARTICLE---");
-  const bodyMd = bodyStart > -1 ? raw.slice(bodyStart + 13).trim() : raw;
-
-  const htmlContent = bodyMd
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .split("\n\n").map(p => p.startsWith("<h") || p.startsWith("<ul") || p.startsWith("<ol") ? p : `<p>${p}</p>`).join("\n");
-
+  const get = k => { const m=raw.match(new RegExp(`${k}:\\s*(.+)`)); return m?m[1].trim():""; };
+  const start = raw.indexOf("---ARTICLE---");
+  const md = start>-1 ? raw.slice(start+13).trim() : raw;
+  const html = md
+    .replace(/^# (.+)$/gm,"<h1>$1</h1>").replace(/^## (.+)$/gm,"<h2>$1</h2>")
+    .replace(/^### (.+)$/gm,"<h3>$1</h3>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g,"<em>$1</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>')
+    .split("\n\n").map(p=>p.startsWith("<h")?p:`<p>${p}</p>`).join("\n");
   return {
-    title:    get("SEO_TITLE") || `${keyword} | THUGFIT`,
+    title: get("SEO_TITLE")||`${keyword} | THUGFIT`,
     metaDesc: get("META_DESC"),
-    slug:     get("SLUG") || keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-    keyword,
-    htmlContent,
+    slug: get("SLUG")||keyword.toLowerCase().replace(/[^a-z0-9]+/g,"-"),
+    keyword, htmlContent: html,
   };
 }
 
 // ─── Publish to WordPress ─────────────────────────────────────────────────────
-async function publishToWordPress(config, article) {
-  const { wp_url: siteUrl, wp_username: user, wp_app_password: pass, post_status } = config;
-  return wpPost(siteUrl, "wp/v2/posts", {
-    title: article.title,
-    content: article.htmlContent,
-    excerpt: article.metaDesc,
-    slug: article.slug,
-    status: post_status || "draft",
-    meta: {
-      _yoast_wpseo_title: article.title,
-      _yoast_wpseo_metadesc: article.metaDesc,
-      _yoast_wpseo_focuskw: article.keyword,
-      rank_math_title: article.title,
-      rank_math_description: article.metaDesc,
-      rank_math_focus_keyword: article.keyword,
+async function publishArticle(config, article) {
+  return wpPost(config.wp_url,"wp/v2/posts",{
+    title:article.title, content:article.htmlContent, excerpt:article.metaDesc,
+    slug:article.slug, status:config.post_status||"draft",
+    meta:{
+      _yoast_wpseo_title:article.title, _yoast_wpseo_metadesc:article.metaDesc,
+      _yoast_wpseo_focuskw:article.keyword,
+      rank_math_title:article.title, rank_math_description:article.metaDesc,
+      rank_math_focus_keyword:article.keyword,
     }
-  }, user, pass);
+  },config.wp_username,config.wp_app_password);
 }
 
 // ─── Ping search engines ──────────────────────────────────────────────────────
 async function pingSearchEngines(siteUrl) {
-  const sm  = encodeURIComponent(`${siteUrl}/sitemap.xml`);
-  const smi = encodeURIComponent(`${siteUrl}/sitemap_index.xml`);
-  const pings = [
-    { h: "www.google.com", p: `/ping?sitemap=${sm}` },
-    { h: "www.google.com", p: `/ping?sitemap=${smi}` },
-    { h: "www.bing.com",   p: `/ping?sitemap=${sm}` },
-  ];
-  const res = await Promise.allSettled(pings.map(({h, p}) => httpsGet(h, p, { "User-Agent": "ZenLine-SEO/1.0" })));
-  return `Pinged ${res.filter(r => r.status === "fulfilled").length}/${pings.length} search engines`;
+  const sm=encodeURIComponent(`${siteUrl}/sitemap.xml`);
+  const smi=encodeURIComponent(`${siteUrl}/sitemap_index.xml`);
+  const results = await Promise.allSettled([
+    httpsGet("www.google.com",`/ping?sitemap=${sm}`,{"User-Agent":"ZenLine-SEO/1.0"}),
+    httpsGet("www.google.com",`/ping?sitemap=${smi}`,{"User-Agent":"ZenLine-SEO/1.0"}),
+    httpsGet("www.bing.com",`/ping?sitemap=${sm}`,{"User-Agent":"ZenLine-SEO/1.0"}),
+  ]);
+  return `Pinged ${results.filter(r=>r.status==="fulfilled").length}/3 search engines`;
 }
 
 // ─── Google Indexing API ──────────────────────────────────────────────────────
-async function submitToGoogleIndexing(serviceKeyJson, postUrl) {
+async function submitGoogleIndexing(serviceKeyJson, postUrl) {
   try {
-    const key = typeof serviceKeyJson === "string" ? JSON.parse(serviceKeyJson) : serviceKeyJson;
-    if (!key.private_key || !key.client_email) return "Indexing API: invalid key format";
-
-    // Create JWT
-    const { createSign } = await import("node:crypto");
-    const now = Math.floor(Date.now() / 1000);
-    const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-    const payload = Buffer.from(JSON.stringify({
-      iss: key.client_email, scope: "https://www.googleapis.com/auth/indexing",
-      aud: "https://oauth2.googleapis.com/token", exp: now + 3600, iat: now,
-    })).toString("base64url");
-    const sigInput = `${header}.${payload}`;
-    const sign = createSign("RSA-SHA256");
-    sign.update(sigInput);
-    const sig = sign.sign(key.private_key, "base64url");
-    const jwt = `${sigInput}.${sig}`;
-
-    // Exchange JWT for access token
-    const tokenRes = await httpsPost("oauth2.googleapis.com", "/token",
-      { "Content-Type": "application/x-www-form-urlencoded" },
-      `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`
-    );
-    if (!tokenRes.body?.access_token) return "Indexing API: could not get access token";
-
-    // Submit URL
-    const idxRes = await httpsPost("indexing.googleapis.com", "/v3/urlNotifications:publish",
-      { "Content-Type": "application/json", Authorization: `Bearer ${tokenRes.body.access_token}` },
-      { url: postUrl, type: "URL_UPDATED" }
-    );
-    return idxRes.status === 200 ? `✓ Submitted to Google Indexing API: ${postUrl}` : `Indexing API: ${idxRes.status}`;
-  } catch (e) { return `Indexing API error: ${e.message}`; }
+    const key = typeof serviceKeyJson==="string" ? JSON.parse(serviceKeyJson) : serviceKeyJson;
+    if(!key.private_key||!key.client_email) return "Indexing API: invalid key";
+    const {createSign} = await import("node:crypto");
+    const now=Math.floor(Date.now()/1000);
+    const hdr=Buffer.from(JSON.stringify({alg:"RS256",typ:"JWT"})).toString("base64url");
+    const pay=Buffer.from(JSON.stringify({iss:key.client_email,scope:"https://www.googleapis.com/auth/indexing",aud:"https://oauth2.googleapis.com/token",exp:now+3600,iat:now})).toString("base64url");
+    const sign=createSign("RSA-SHA256"); sign.update(`${hdr}.${pay}`);
+    const jwt=`${hdr}.${pay}.${sign.sign(key.private_key,"base64url")}`;
+    const tok=await httpsPost("oauth2.googleapis.com","/token",{"Content-Type":"application/x-www-form-urlencoded"},`grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`);
+    if(!tok.body?.access_token) return "Indexing API: no token";
+    const res=await httpsPost("indexing.googleapis.com","/v3/urlNotifications:publish",{"Content-Type":"application/json",Authorization:`Bearer ${tok.body.access_token}`},{url:postUrl,type:"URL_UPDATED"});
+    return res.status===200 ? `✓ Submitted to Google: ${postUrl}` : `Indexing API error: ${res.status}`;
+  } catch(e) { return `Indexing API: ${e.message}`; }
 }
 
-// ─── Fetch product links for internal linking ─────────────────────────────────
+// ─── Get product links ────────────────────────────────────────────────────────
 async function getProductLinks(config) {
   try {
-    const r = await wpGet(config.wp_url, "wc/v3/products?per_page=15&status=publish", config.wp_username, config.wp_app_password);
-    if (!Array.isArray(r.body)) return [];
-    return r.body.map(p => ({ name: p.name, link: p.permalink || `${config.wp_url}/product/${p.slug}` })).filter(p => p.link);
+    const r=await wpGet(config.wp_url,"wc/v3/products?per_page=15&status=publish",config.wp_username,config.wp_app_password);
+    if(!Array.isArray(r.body)) return [];
+    return r.body.map(p=>({name:p.name,link:p.permalink||`${config.wp_url}/product/${p.slug}`})).filter(p=>p.link);
   } catch { return []; }
 }
 
-// ─── Apply image alt tags to all products ────────────────────────────────────
-async function applyImageAltTags(config, apiKey) {
-  const results = [];
+// ─── Image alt tags ───────────────────────────────────────────────────────────
+async function applyAltTags(config, apiKey) {
+  const results=[];
   try {
-    const r = await wpGet(config.wp_url, "wc/v3/products?per_page=20&status=publish", config.wp_username, config.wp_app_password);
-    if (!Array.isArray(r.body)) return ["Could not fetch products for alt tag update"];
-
-    for (const product of r.body.slice(0, 10)) {
-      if (!product.images || product.images.length === 0) continue;
-      const hasAlt = product.images.every(img => img.alt && img.alt.trim().length > 0);
-      if (hasAlt) { results.push(`${product.name}: already has alt tags`); continue; }
-
-      const altText = await callClaude(apiKey,
-        "Write concise, SEO-optimised image alt text for UAE e-commerce product images.",
-        `Product: "${product.name}" — THUGFIT UAE activewear brand.
-Write ${product.images.length} alt text(s), one per line, max 120 chars each. Include product name and UAE where natural. Return ONLY the alt texts, one per line, no numbering.`,
-        300
-      );
-      const alts = altText.trim().split("\n").filter(Boolean);
-      const updatedImages = product.images.map((img, i) => ({ ...img, alt: alts[i] || `${product.name} - THUGFIT UAE activewear` }));
-
-      await wpPut(config.wp_url, `wc/v3/products/${product.id}`, { images: updatedImages }, config.wp_username, config.wp_app_password);
-      results.push(`${product.name}: ✓ alt tags applied`);
+    const r=await wpGet(config.wp_url,"wc/v3/products?per_page=20&status=publish",config.wp_username,config.wp_app_password);
+    if(!Array.isArray(r.body)) return ["Could not fetch products"];
+    for(const p of r.body.slice(0,10)) {
+      if(!p.images?.length) continue;
+      if(p.images.every(i=>i.alt?.trim())) { results.push(`${p.name}: already has alt tags`); continue; }
+      const alts=(await callClaude(apiKey,"Write concise SEO alt text for UAE activewear product images. Plain text only, one per line, no numbering.",`Product: "${p.name}" — THUGFIT UAE activewear. Write ${p.images.length} alt text(s), one per line, max 120 chars each.`,300)).trim().split("\n").filter(Boolean);
+      const imgs=p.images.map((img,i)=>({...img,alt:alts[i]||`${p.name} - THUGFIT UAE activewear`}));
+      await wpPut(config.wp_url,`wc/v3/products/${p.id}`,{images:imgs},config.wp_username,config.wp_app_password);
+      results.push(`${p.name}: ✓ alt tags applied`);
     }
-  } catch (e) { results.push(`Alt tag error: ${e.message}`); }
+  } catch(e) { results.push(`Error: ${e.message}`); }
   return results;
 }
 
-// ─── Inject schema markup ─────────────────────────────────────────────────────
-async function injectSchemaMarkup(config) {
-  const results = [];
+// ─── Schema markup ────────────────────────────────────────────────────────────
+async function applySchema(config) {
+  const results=[];
   try {
-    const r = await wpGet(config.wp_url, "wc/v3/products?per_page=20&status=publish", config.wp_username, config.wp_app_password);
-    if (!Array.isArray(r.body)) return ["Could not fetch products for schema"];
-
-    for (const product of r.body.slice(0, 10)) {
-      const schema = JSON.stringify({
-        "@context": "https://schema.org/",
-        "@type": "Product",
-        name: product.name,
-        description: product.description?.replace(/<[^>]*>/g, "").slice(0, 300) || product.name,
-        brand: { "@type": "Brand", name: "THUGFIT" },
-        offers: {
-          "@type": "Offer",
-          url: product.permalink || `${config.wp_url}/product/${product.slug}`,
-          priceCurrency: "AED",
-          price: product.price || "0",
-          availability: product.stock_status === "instock" ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-          seller: { "@type": "Organization", name: "THUGFIT" }
-        },
-        image: product.images?.[0]?.src || "",
-      });
-
-      const schemaScript = `\n<!-- THUGFIT Schema -->\n<script type="application/ld+json">${schema}</script>`;
-      const currentContent = product.description || "";
-      if (!currentContent.includes("application/ld+json")) {
-        await wpPut(config.wp_url, `wc/v3/products/${product.id}`,
-          { description: currentContent + schemaScript },
-          config.wp_username, config.wp_app_password
-        );
-        results.push(`${product.name}: ✓ schema applied`);
-      } else {
-        results.push(`${product.name}: schema already present`);
-      }
+    const r=await wpGet(config.wp_url,"wc/v3/products?per_page=20&status=publish",config.wp_username,config.wp_app_password);
+    if(!Array.isArray(r.body)) return ["Could not fetch products"];
+    for(const p of r.body.slice(0,10)) {
+      const schema=JSON.stringify({"@context":"https://schema.org/","@type":"Product",name:p.name,description:p.description?.replace(/<[^>]*>/g,"").slice(0,300)||p.name,brand:{"@type":"Brand",name:"THUGFIT"},offers:{"@type":"Offer",url:p.permalink||`${config.wp_url}/product/${p.slug}`,priceCurrency:"AED",price:p.price||"0",availability:p.stock_status==="instock"?"https://schema.org/InStock":"https://schema.org/OutOfStock",seller:{"@type":"Organization",name:"THUGFIT"}},image:p.images?.[0]?.src||""});
+      const curr=p.description||"";
+      if(!curr.includes("application/ld+json")) {
+        await wpPut(config.wp_url,`wc/v3/products/${p.id}`,{description:curr+`\n<script type="application/ld+json">${schema}</script>`},config.wp_username,config.wp_app_password);
+        results.push(`${p.name}: ✓ schema applied`);
+      } else results.push(`${p.name}: schema already present`);
     }
-  } catch (e) { results.push(`Schema error: ${e.message}`); }
+  } catch(e) { results.push(`Error: ${e.message}`); }
   return results;
+}
+
+// ─── 404 monitor ─────────────────────────────────────────────────────────────
+async function monitor404(config, supaKey) {
+  const errors=[];
+  try {
+    const [posts,products]=await Promise.all([
+      wpGet(config.wp_url,"wp/v2/posts?per_page=20&status=publish",config.wp_username,config.wp_app_password),
+      wpGet(config.wp_url,"wc/v3/products?per_page=20&status=publish",config.wp_username,config.wp_app_password),
+    ]);
+    const urls=[
+      ...(Array.isArray(posts.body)?posts.body:[]).map(p=>({type:"post",title:p.title?.rendered,url:p.link})),
+      ...(Array.isArray(products.body)?products.body:[]).map(p=>({type:"product",title:p.name,url:p.permalink})),
+    ].filter(u=>u.url);
+    for(const item of urls.slice(0,30)) {
+      try {
+        const u=new URL(item.url);
+        const r=await httpsGet(u.hostname,u.pathname+u.search,{"User-Agent":"ZenLine-SEO/1.0"});
+        if(r.status===404||r.status===410) {
+          errors.push({type:item.type,title:item.title,url:item.url,status:r.status});
+          await addStaffTask(supaKey,{type:"404_error",description:`${item.type}: "${item.title}" returns ${r.status}`,url:item.url,resolved:false});
+        }
+      } catch { /* skip unreachable */ }
+    }
+  } catch(e) { /* silent */ }
+  return errors;
 }
 
 // ─── Broken link checker ──────────────────────────────────────────────────────
-async function checkBrokenLinks(config) {
-  const broken = [];
+async function checkBrokenLinks(config, supaKey) {
+  const broken=[];
   try {
-    const r = await wpGet(config.wp_url, "wp/v2/posts?per_page=10&status=publish", config.wp_username, config.wp_app_password);
-    if (!Array.isArray(r.body)) return [];
-    for (const post of r.body) {
-      const links = [...(post.content?.rendered || "").matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
-      for (const link of links.slice(0, 5)) {
+    const r=await wpGet(config.wp_url,"wp/v2/posts?per_page=10&status=publish",config.wp_username,config.wp_app_password);
+    if(!Array.isArray(r.body)) return [];
+    for(const post of r.body) {
+      const links=[...(post.content?.rendered||"").matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m=>m[1]).slice(0,6);
+      for(const link of links) {
         try {
-          const u = new URL(link);
-          const res = await httpsGet(u.hostname, u.pathname + u.search, { "User-Agent": "ZenLine-SEO/1.0" });
-          if (res.status === 404 || res.status === 410) broken.push({ post: post.title?.rendered, link, status: res.status });
-        } catch { broken.push({ post: post.title?.rendered, link, status: "unreachable" }); }
+          const u=new URL(link);
+          const res=await httpsGet(u.hostname,u.pathname+u.search,{"User-Agent":"ZenLine-SEO/1.0"});
+          if(res.status===404||res.status===410) {
+            broken.push({post:post.title?.rendered,link,status:res.status});
+            await addStaffTask(supaKey,{type:"broken_link",description:`Broken link in "${post.title?.rendered}": ${link} (${res.status})`,url:link,resolved:false});
+          }
+        } catch { /* skip */ }
       }
     }
-  } catch (e) { /* silent */ }
+  } catch { /* silent */ }
   return broken;
 }
 
-// ─── Log ─────────────────────────────────────────────────────────────────────
-const logActivity = (k, e) => sbPost("/rest/v1/seo_activity_log", e, k).catch(() => {});
+// ─── Duplicate content check ──────────────────────────────────────────────────
+async function checkDuplicateContent(config, apiKey, supaKey) {
+  try {
+    const r=await wpGet(config.wp_url,"wp/v2/posts?per_page=20&status=publish",config.wp_username,config.wp_app_password);
+    if(!Array.isArray(r.body)||r.body.length<2) return "Not enough posts to check";
+    const titles=r.body.map(p=>({id:p.id,title:p.title?.rendered,url:p.link}));
+    const result=await callClaude(apiKey,
+      "You are an SEO content auditor. Check for duplicate or very similar content topics.",
+      `These are blog posts on thugfit.ae. Identify any that cover nearly the same topic (would compete with each other in Google):
+${titles.map((t,i)=>`${i+1}. ${t.title}`).join("\n")}
+
+Return JSON only: {"duplicates":[{"titles":["title1","title2"],"reason":"why they overlap","recommendation":"what to do"}]}
+If no duplicates found return: {"duplicates":[]}`,
+      800
+    );
+    const parsed=JSON.parse(result.replace(/```json|```/g,"").trim());
+    if(parsed.duplicates?.length>0) {
+      for(const dup of parsed.duplicates) {
+        await addStaffTask(supaKey,{type:"duplicate_content",description:`Potential duplicate: "${dup.titles.join('" and "')}" — ${dup.recommendation}`,url:"",resolved:false});
+      }
+      return `${parsed.duplicates.length} duplicate content issues found`;
+    }
+    return "No duplicate content found";
+  } catch(e) { return `Duplicate check error: ${e.message}`; }
+}
+
+// ─── Auto competitor analysis (no staff input needed) ─────────────────────────
+async function autoCompetitorAnalysis(apiKey, supaKey) {
+  try {
+    const competitor=UAE_COMPETITORS[new Date().getDate() % UAE_COMPETITORS.length];
+    const result=await callClaude(apiKey,
+      "You are an SEO competitor analyst for UAE activewear e-commerce.",
+      `Analyse ${competitor} as a competitor of THUGFIT (thugfit.ae, UAE gym activewear).
+Identify 10 keywords they likely rank for that THUGFIT should target in the UAE market.
+Return JSON only: {"competitor":"${competitor}","keywords":["kw1","kw2",...10 keywords]}`,
+      500
+    );
+    const parsed=JSON.parse(result.replace(/```json|```/g,"").trim());
+    if(Array.isArray(parsed.keywords)&&parsed.keywords.length>0) {
+      await Promise.all(parsed.keywords.map(kw=>sbPost("/rest/v1/seo_keyword_queue",{keyword:kw,used:false,priority:6},supaKey).catch(()=>{})));
+      return `Auto competitor analysis: ${parsed.keywords.length} keywords from ${parsed.competitor} added to queue`;
+    }
+    return "Competitor analysis: no keywords extracted";
+  } catch(e) { return `Competitor error: ${e.message}`; }
+}
+
+// ─── Google Business Profile post ─────────────────────────────────────────────
+async function postToGoogleBusiness(config, apiKey) {
+  if(!config.gbp_access_token||!config.gbp_location_id) return "GBP: not configured";
+  try {
+    const text=await callClaude(apiKey,
+      "Write a short Google Business Profile post for a UAE gym activewear brand. Under 300 words. Motivational, professional.",
+      "Write a Google Business Profile weekly update post for THUGFIT (premium UAE gym activewear, thugfit.ae). Include a call to action to visit thugfit.ae. No hashtags. Plain text only.",
+      400
+    );
+    const r=await httpsPost("mybusinessposts.googleapis.com",
+      `/v1/${config.gbp_location_id}/localPosts`,
+      {"Content-Type":"application/json",Authorization:`Bearer ${config.gbp_access_token}`},
+      {languageCode:"en-US",summary:text.slice(0,1500),callToAction:{actionType:"SHOP",url:"https://thugfit.ae"},topicType:"STANDARD"}
+    );
+    return r.status===200||r.status===201 ? "✓ Google Business Profile post published" : `GBP error: ${r.status}`;
+  } catch(e) { return `GBP error: ${e.message}`; }
+}
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  const isVercelCron = req.headers["x-vercel-cron"] === "1";
-  const secret = process.env.CRON_SECRET || "";
-  const auth = req.headers.authorization || "";
-  const isManual = secret ? auth === `Bearer ${secret}` : true;
+  const isVercelCron=req.headers["x-vercel-cron"]==="1";
+  const secret=process.env.CRON_SECRET||"";
+  const auth=req.headers.authorization||"";
+  const isManual=secret ? auth===`Bearer ${secret}` : true;
+  if(!isVercelCron&&!isManual&&process.env.NODE_ENV!=="development")
+    return res.status(401).json({error:"Unauthorized"});
 
-  if (!isVercelCron && !isManual && process.env.NODE_ENV !== "development") {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  const supaKey=process.env.SUPABASE_SERVICE_KEY||process.env.VITE_SUPABASE_ANON_KEY||"";
+  const anthropicKey=process.env.ANTHROPIC_API_KEY||"";
+  if(!supaKey||!anthropicKey) return res.status(500).json({error:"Missing env vars"});
 
-  const supaKey    = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
-  const anthropicKey = process.env.ANTHROPIC_API_KEY || "";
-  if (!supaKey || !anthropicKey) return res.status(500).json({ error: "Missing env vars" });
-
-  const report = {};
+  const report={};
+  const today=new Date();
+  const dayOfWeek=today.getDay();   // 0=Sun, 1=Mon
+  const dayOfMonth=today.getDate(); // 1-31
 
   try {
     // 1. Load config
-    const configs = await sbGet("/rest/v1/seo_automation?limit=1", supaKey);
-    const config = configs[0];
-    if (!config) return res.status(200).json({ skipped: true, reason: "No config" });
-    if (!config.is_enabled) return res.status(200).json({ skipped: true, reason: "Automation paused" });
-    if (!config.wp_username || !config.wp_app_password) {
-      await logActivity(supaKey, { action: "error", status: "failed", error: "WordPress credentials missing" });
-      return res.status(200).json({ skipped: true, reason: "WordPress credentials missing" });
+    const configs=await sbGet("/rest/v1/seo_automation?limit=1",supaKey);
+    const config=configs[0];
+    if(!config) return res.status(200).json({skipped:true,reason:"No config"});
+    if(!config.is_enabled) return res.status(200).json({skipped:true,reason:"Automation paused"});
+    if(!config.wp_username||!config.wp_app_password) {
+      await logActivity(supaKey,{action:"error",status:"failed",error:"WordPress credentials missing"});
+      return res.status(200).json({skipped:true,reason:"WordPress credentials missing"});
     }
 
     // 2. Pick keyword
-    const queue = await sbGet("/rest/v1/seo_keyword_queue?used=eq.false&order=priority.desc,created_at.asc&limit=1", supaKey);
-    let keyword, kwId;
-    if (queue.length > 0) { keyword = queue[0].keyword; kwId = queue[0].id; }
-    else { const d = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000); keyword = SEED_KEYWORDS[d % SEED_KEYWORDS.length]; }
+    const queue=await sbGet("/rest/v1/seo_keyword_queue?used=eq.false&order=priority.desc,created_at.asc&limit=1",supaKey);
+    let keyword,kwId;
+    if(queue.length>0){keyword=queue[0].keyword;kwId=queue[0].id;}
+    else{const d=Math.floor((Date.now()-new Date(today.getFullYear(),0,0))/86400000);keyword=SEED_KEYWORDS[d%SEED_KEYWORDS.length];}
 
     // 3. Get product links for internal linking
-    const productLinks = await getProductLinks(config);
-    report.internalLinks = `${productLinks.length} product links available for internal linking`;
+    const productLinks=await getProductLinks(config);
 
-    // 4. Generate article (with internal links woven in)
-    const article = await generateArticle(anthropicKey, keyword, productLinks.slice(0, 5));
+    // 4. Generate + publish article
+    const article=await generateArticle(anthropicKey,keyword,productLinks.slice(0,5));
+    const wpResult=await publishArticle(config,article);
+    const success=wpResult.status===201;
+    const wpPostId=wpResult.body?.id;
+    const wpPostUrl=wpResult.body?.link||wpResult.body?.guid?.rendered;
+    report.article={success,title:article.title,keyword,wpPostUrl};
 
-    // 5. Publish to WordPress (with Yoast + Rank Math meta injected)
-    const wpResult = await publishToWordPress(config, article);
-    const success  = wpResult.status === 201;
-    const wpPostId  = wpResult.body?.id;
-    const wpPostUrl = wpResult.body?.link || wpResult.body?.guid?.rendered;
-    report.published = success;
+    // 5. Ping Google + Bing
+    report.ping=await pingSearchEngines(config.wp_url||"https://thugfit.ae");
 
-    // 6. Ping Google + Bing
-    report.ping = await pingSearchEngines(config.wp_url || "https://thugfit.ae");
-
-    // 7. Google Indexing API (if service key configured)
-    if (config.google_indexing_key && wpPostUrl) {
-      report.indexing = await submitToGoogleIndexing(config.google_indexing_key, wpPostUrl);
+    // 6. Google Indexing API
+    if(config.google_indexing_key&&wpPostUrl) {
+      report.indexing=await submitGoogleIndexing(config.google_indexing_key,wpPostUrl);
     }
 
-    // 8. Mark keyword used
-    if (kwId) await sbPatch(`/rest/v1/seo_keyword_queue?id=eq.${kwId}`, { used: true, used_at: new Date().toISOString() }, supaKey);
+    // 7. Mark keyword used
+    if(kwId) await sbPatch(`/rest/v1/seo_keyword_queue?id=eq.${kwId}`,{used:true,used_at:new Date().toISOString()},supaKey);
 
-    // 9. Log main activity
-    await logActivity(supaKey, {
-      action: "blog_published", title: article.title, keyword,
-      status: success ? (config.post_status === "publish" ? "published" : "saved as draft") : "failed",
-      wp_post_id: wpPostId || null, wp_post_url: wpPostUrl || null,
-      error: success ? null : `WP ${wpResult.status}: ${JSON.stringify(wpResult.body).slice(0, 200)}`,
+    // 8. Log main activity
+    await logActivity(supaKey,{
+      action:"blog_published",title:article.title,keyword,
+      status:success?(config.post_status==="publish"?"published":"saved as draft"):"failed",
+      wp_post_id:wpPostId||null,wp_post_url:wpPostUrl||null,
+      error:success?null:`WP ${wpResult.status}: ${JSON.stringify(wpResult.body).slice(0,200)}`,
     });
 
-    // 10. Update last_run
-    await sbPatch("/rest/v1/seo_automation?limit=1", { last_run: new Date().toISOString() }, supaKey);
+    // 9. Update last_run
+    await sbPatch("/rest/v1/seo_automation?limit=1",{last_run:new Date().toISOString()},supaKey);
 
-    // 11. Weekly tasks (runs on Monday = day 1)
-    const dayOfWeek = new Date().getDay();
-    if (dayOfWeek === 1) {
-      // Broken link check
-      const broken = await checkBrokenLinks(config);
-      if (broken.length > 0) {
-        await logActivity(supaKey, { action: "broken_links", status: broken.length > 0 ? "issues_found" : "ok", error: JSON.stringify(broken).slice(0, 500) });
+    // ── WEEKLY (Monday) ───────────────────────────────────────────────────────
+    if(dayOfWeek===1) {
+      // Broken link check — logs to staff tasks if found
+      const broken=await checkBrokenLinks(config,supaKey);
+      report.brokenLinks=`${broken.length} broken links found${broken.length>0?" — added to staff tasks":""}`;
+      await logActivity(supaKey,{action:"broken_link_check",status:broken.length>0?"issues_found":"ok",error:broken.length>0?JSON.stringify(broken).slice(0,400):null});
+
+      // 404 monitor — logs to staff tasks if found
+      const errors404=await monitor404(config,supaKey);
+      report.monitor404=`${errors404.length} 404 errors found${errors404.length>0?" — added to staff tasks":""}`;
+      await logActivity(supaKey,{action:"404_monitor",status:errors404.length>0?"issues_found":"ok",error:errors404.length>0?JSON.stringify(errors404).slice(0,400):null});
+
+      // Google Business Profile post (if configured)
+      if(config.gbp_access_token) {
+        report.gbp=await postToGoogleBusiness(config,anthropicKey);
+        await logActivity(supaKey,{action:"gbp_post",status:"completed",error:report.gbp});
       }
-      report.brokenLinks = `${broken.length} broken links found`;
     }
 
-    // 12. Monthly tasks (runs on 1st of month)
-    const dayOfMonth = new Date().getDate();
-    if (dayOfMonth === 1) {
+    // ── MONTHLY (1st of month) ────────────────────────────────────────────────
+    if(dayOfMonth===1) {
       // Image alt tags
-      const altResults = await applyImageAltTags(config, anthropicKey);
-      await logActivity(supaKey, { action: "alt_tags", status: "completed", error: altResults.join(" | ").slice(0, 500) });
-      report.altTags = altResults;
+      const altResults=await applyAltTags(config,anthropicKey);
+      await logActivity(supaKey,{action:"alt_tags",status:"completed",error:altResults.join(" | ").slice(0,500)});
+      report.altTags=altResults;
 
       // Schema markup
-      const schemaResults = await injectSchemaMarkup(config);
-      await logActivity(supaKey, { action: "schema_markup", status: "completed", error: schemaResults.join(" | ").slice(0, 500) });
-      report.schema = schemaResults;
+      const schemaResults=await applySchema(config);
+      await logActivity(supaKey,{action:"schema_markup",status:"completed",error:schemaResults.join(" | ").slice(0,500)});
+      report.schema=schemaResults;
+
+      // Duplicate content check — logs to staff tasks if found
+      report.duplicates=await checkDuplicateContent(config,anthropicKey,supaKey);
+      await logActivity(supaKey,{action:"duplicate_check",status:"completed",error:report.duplicates});
+
+      // Auto competitor analysis — adds keywords to queue automatically
+      report.competitor=await autoCompetitorAnalysis(anthropicKey,supaKey);
+      await logActivity(supaKey,{action:"competitor_analysis",status:"completed",error:report.competitor});
     }
 
-    return res.status(200).json({ success, keyword, title: article.title, wpPostId, wpPostUrl, report });
+    return res.status(200).json({success,keyword,title:article.title,wpPostId,wpPostUrl,report});
 
-  } catch (err) {
-    await logActivity(supaKey, { action: "error", status: "failed", error: err.message }).catch(() => {});
-    return res.status(500).json({ error: err.message });
+  } catch(err) {
+    await logActivity(supaKey,{action:"error",status:"failed",error:err.message}).catch(()=>{});
+    return res.status(500).json({error:err.message});
   }
 }
