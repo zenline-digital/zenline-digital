@@ -125,6 +125,236 @@ const NAV = [
 ];
 
 
+// ─── Google Business Profile Section ─────────────────────────────────────────
+function GBPSection({ showToast, config }) {
+  const [gbpTab, setGbpTab]           = useState("manual"); // "manual" | "auto"
+  const [postText, setPostText]       = useState("");
+  const [generating, setGenerating]   = useState(false);
+  const [postTopic, setPostTopic]     = useState("weekly_promo");
+  const [copied, setCopied]           = useState(false);
+  const [oauthClientId, setOauthClientId]     = useState(localStorage.getItem("gbp_client_id") || "");
+  const [oauthSecret, setOauthSecret]         = useState(localStorage.getItem("gbp_client_secret") || "");
+  const [oauthConnected, setOauthConnected]   = useState(!!localStorage.getItem("gbp_access_token"));
+
+  const TOPIC_OPTIONS = [
+    { value: "weekly_promo",    label: "Weekly Promotion"         },
+    { value: "new_arrivals",    label: "New Arrivals"             },
+    { value: "train_earn",      label: "Train & Earn Programme"   },
+    { value: "workout_tip",     label: "Workout Tip"              },
+    { value: "uae_fitness",     label: "UAE Fitness Lifestyle"    },
+    { value: "product_feature", label: "Product Feature"          },
+  ];
+
+  const TOPIC_PROMPTS = {
+    weekly_promo:    "a weekly promotional post highlighting THUGFIT activewear deals and encouraging UAE gym-goers to shop at thugfit.ae",
+    new_arrivals:    "a new arrivals announcement for THUGFIT UAE activewear, creating excitement and urgency to check thugfit.ae",
+    train_earn:      "the THUGFIT Train & Earn programme — UAE fitness professionals earn commission by sharing their unique code, audience gets 20% off, they get 40% VIP discount on personal orders. Apply at thugfit.ae/thugfit-train-earn",
+    workout_tip:     "a practical UAE-focused workout tip for gym-goers, naturally connecting to quality activewear from thugfit.ae",
+    uae_fitness:     "the UAE fitness lifestyle — Dubai gym culture, motivation, and premium activewear from thugfit.ae",
+    product_feature: "a specific THUGFIT product category (leggings, sports bras, shorts) with benefits for UAE climate and gym conditions",
+  };
+
+  const generatePost = async () => {
+    setGenerating(true);
+    setPostText("");
+    try {
+      const res = await fetch("/api/claude", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6", max_tokens: 600,
+          system: "You write Google Business Profile posts for THUGFIT, a premium UAE gym activewear brand. Posts are motivational, professional, and drive traffic to thugfit.ae. No hashtags. Max 300 words. End with a clear call to action.",
+          messages: [{ role: "user", content: `Write a Google Business Profile post about ${TOPIC_PROMPTS[postTopic]}.
+
+Requirements:
+- 150-250 words
+- Motivational and professional tone
+- UAE audience (mention Dubai/UAE naturally)
+- End with CTA linking to thugfit.ae
+- No hashtags (GBP doesn't support them well)
+- No markdown, plain text only
+- Start with a strong opening line, not "Welcome" or "Hello"` }]
+        })
+      });
+      const data = await res.json();
+      setPostText(data.content[0].text.trim());
+    } catch(e) { showToast("❌ " + e.message); }
+    finally { setGenerating(false); }
+  };
+
+  const copyPost = () => {
+    navigator.clipboard.writeText(postText);
+    setCopied(true);
+    showToast("✅ Post copied to clipboard");
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  const saveOAuth = () => {
+    localStorage.setItem("gbp_client_id", oauthClientId);
+    localStorage.setItem("gbp_client_secret", oauthSecret);
+    showToast("✅ OAuth credentials saved");
+  };
+
+  const connectGoogle = () => {
+    if (!oauthClientId) { showToast("Enter your OAuth Client ID first"); return; }
+    const redirectUri = encodeURIComponent("https://zenline-digital.vercel.app/api/gbp-callback");
+    const scope = encodeURIComponent("https://www.googleapis.com/auth/business.manage");
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${oauthClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+    window.open(url, "_blank");
+    showToast("Complete Google login in the new tab — come back here after");
+  };
+
+  const sBorder = "1px solid #1e1e30";
+  const sCard = { background: "#0d0d16", border: sBorder, borderRadius: 10, padding: 16 };
+  const sBtn = (bg, col="#fff", extra={}) => ({ padding: "9px 18px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", background: bg, color: col, display: "flex", alignItems: "center", gap: 6, ...extra });
+  const sInput = { width: "100%", background: "#0d0d16", border: sBorder, color: "#e2e8f0", padding: "9px 12px", borderRadius: 8, fontSize: 13, outline: "none", fontFamily: "inherit" };
+  const sLabel = { fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 };
+
+  return (
+    <div style={{ background: "#13131f", border: sBorder, borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
+
+      {/* Tab toggle */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        <button onClick={() => setGbpTab("manual")} style={{ ...sBtn(gbpTab === "manual" ? "#7c3aed" : "#1e1e30"), padding: "7px 16px", fontSize: 12 }}>
+          ✍️ Option B — Staff Posts Daily (Active Now)
+        </button>
+        <button onClick={() => setGbpTab("auto")} style={{ ...sBtn(gbpTab === "auto" ? "#7c3aed" : "#1e1e30"), padding: "7px 16px", fontSize: 12 }}>
+          🤖 Option A — Full Automation (Setup Pending)
+        </button>
+      </div>
+
+      {/* OPTION B — MANUAL */}
+      {gbpTab === "manual" && (
+        <div>
+          <div style={{ background: "#16a34a10", border: "1px solid #16a34a40", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#4ade80", lineHeight: 1.6 }}>
+            ✅ <strong>Active now.</strong> Staff generates a post below, copies it, and pastes it into Google Business Profile. Takes 2 minutes daily. This keeps your GBP active while Option A is being approved by Google.
+          </div>
+
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <label style={sLabel}>Post Topic</label>
+              <select value={postTopic} onChange={e => setPostTopic(e.target.value)} style={sInput}>
+                {TOPIC_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <button onClick={generatePost} disabled={generating} style={{ ...sBtn("linear-gradient(135deg,#7c3aed,#2563eb)"), whiteSpace: "nowrap" }}>
+              {generating ? <><div style={{ width: 14, height: 14, border: "2px solid #ffffff40", borderTop: "2px solid #fff", borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Generating…</> : "✨ Generate Post"}
+            </button>
+          </div>
+
+          {postText && (
+            <div>
+              <div style={{ ...sCard, marginBottom: 12 }}>
+                <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{postText}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={copyPost} style={{ ...sBtn(copied ? "#16a34a" : "#7c3aed") }}>
+                  {copied ? "✅ Copied!" : "📋 Copy Post"}
+                </button>
+                <a href="https://business.google.com" target="_blank" rel="noreferrer"
+                  style={{ ...sBtn("#1e1e30"), textDecoration: "none", color: "#e2e8f0" }}>
+                  🌐 Open Google Business →
+                </a>
+                <button onClick={generatePost} disabled={generating} style={{ ...sBtn("#1e1e30", "#64748b") }}>
+                  ↺ Regenerate
+                </button>
+              </div>
+
+              <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 8, padding: "12px 16px", marginTop: 14 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 8 }}>📋 Staff steps (do this after copying):</div>
+                {[
+                  "Go to business.google.com → sign in with the THUGFIT Google account",
+                  "Click your business → Posts (left sidebar) → Create post",
+                  "Select 'What's new' → paste the copied text",
+                  "Optionally add a photo of a THUGFIT product",
+                  "Click 'Post' — done",
+                ].map((s, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 12, color: "#94a3b8" }}>
+                    <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* OPTION A — FULL AUTO */}
+      {gbpTab === "auto" && (
+        <div>
+          <div style={{ background: "#fb923c10", border: "1px solid #fb923c40", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#fb923c", lineHeight: 1.6 }}>
+            ⏳ <strong>Pending Google approval.</strong> Google must review and approve the OAuth app before this works. Typically takes 1–4 weeks. Continue with Option B while waiting.
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 13, color: "#e2e8f0", marginBottom: 12 }}>One-time setup steps:</div>
+
+          <div style={{ ...sCard, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 10 }}>Step 1 — Enable APIs (do this now)</div>
+            {[
+              "console.cloud.google.com → Image Studio project",
+              "APIs & Services → Library → search 'My Business Account Management API' → Enable",
+              "APIs & Services → Library → search 'My Business Business Information API' → Enable",
+            ].map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 12, color: "#94a3b8" }}>
+                <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...sCard, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 10 }}>Step 2 — OAuth Consent Screen</div>
+            {[
+              "APIs & Services → OAuth consent screen → External → Create",
+              "App name: 'ZenLine Digital' | User support email: midhun@thugfit.ae",
+              "Add scope: '../auth/business.manage'",
+              "Add your email as Test User",
+              "Submit for verification (Google reviews this — takes 1-4 weeks)",
+            ].map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 12, color: "#94a3b8" }}>
+                <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...sCard, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 10 }}>Step 3 — Create OAuth Client ID</div>
+            {[
+              "APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID",
+              "Application type: Web application | Name: ZenLine Digital",
+              "Authorised redirect URI: https://zenline-digital.vercel.app/api/gbp-callback",
+              "Click Create → copy the Client ID and Client Secret",
+              "Paste them below and save",
+            ].map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 12, color: "#94a3b8" }}>
+                <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={sLabel}>OAuth Client ID</label>
+            <input value={oauthClientId} onChange={e => setOauthClientId(e.target.value)} placeholder="xxxxxxxx.apps.googleusercontent.com" style={sInput} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={sLabel}>OAuth Client Secret</label>
+            <input type="password" value={oauthSecret} onChange={e => setOauthSecret(e.target.value)} placeholder="GOCSPX-..." style={sInput} />
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={saveOAuth} style={sBtn("linear-gradient(135deg,#7c3aed,#2563eb)")}>Save Credentials</button>
+            {oauthClientId && (
+              <button onClick={connectGoogle} style={sBtn("#16a34a")}>🔗 Connect Google Account</button>
+            )}
+          </div>
+          {oauthConnected && (
+            <div style={{ marginTop: 12, background: "#16a34a10", border: "1px solid #16a34a40", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#4ade80" }}>
+              ✅ Google account connected — auto-posting will activate once Google approves the app
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Staff Task Manager ──────────────────────────────────────────────────────
 const TASK_SB_URL = "https://ioniqxioapcdgenpksex.supabase.co";
 const TASK_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbmlxeGlvYXBjZGdlbnBrc2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNDc1MDIsImV4cCI6MjEwMDcyMzUwMn0.PS80PFMqBYMf0e6uiYvTFk90gF7a7jo97C-dzzxUGho";
@@ -1375,24 +1605,9 @@ Return as JSON only:
             )}
 
             {/* ── GOOGLE BUSINESS PROFILE ──────────────────────────────────── */}
-            {sectionBtn("gbp", "Google Business Profile", "📍")}
+            {sectionBtn("gbp", "Google Business Profile Posts", "📍")}
             {openSection === "gbp" && (
-              <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
-                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>
-                  Auto-posts a weekly update to your Google Business Profile every Monday. This keeps your profile active which helps local UAE search rankings. Needs one-time Google OAuth setup below.
-                </div>
-                <div style={{ background: "#7c3aed10", border: "1px solid #7c3aed30", borderRadius: 8, padding: "12px 16px", marginBottom: 16 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 10 }}>📋 One-time setup (do this once):</div>
-                  {["Go to console.cloud.google.com → Image Studio project", "APIs & Services → Library → search 'My Business Posts API' → Enable", "APIs & Services → Library → search 'Google My Business API' → Enable", "OAuth consent screen → External → add your email as test user", "Credentials → Create OAuth 2.0 Client ID → Web application → add redirect URI: https://zenline-digital.vercel.app", "Copy Client ID and Client Secret → paste into your Settings below"].map((s, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 12, color: "#94a3b8" }}>
-                      <span style={{ color: "#7c3aed", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span> {s}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ background: "#16a34a10", border: "1px solid #16a34a30", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#4ade80" }}>
-                  ✅ Once configured in Settings, the agent auto-posts to Google Business Profile every Monday. Content is AI-written, THUGFIT branded, with a link back to thugfit.ae.
-                </div>
-              </div>
+              <GBPSection showToast={showToast} config={config} />
             )}
 
             {/* ── GOOGLE SEARCH CONSOLE ─────────────────────────────────────── */}
