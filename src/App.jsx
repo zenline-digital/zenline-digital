@@ -1563,7 +1563,7 @@ Return JSON only:
         let content = post.content?.rendered || "";
         for (const link of links) {
           // Escape special regex chars in URL
-          const escaped = link.replace(/[.*+?^${}()|[\]\]/g, "\$&");
+          const escaped = link.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           // Remove <a href="brokenlink"...>text</a> → keep text
           content = content.replace(new RegExp(`<a[^>]*href=["']${escaped}["'][^>]*>(.*?)<\/a>`, "gi"), "$1");
         }
