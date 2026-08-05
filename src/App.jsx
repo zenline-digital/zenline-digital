@@ -1394,27 +1394,36 @@ What to do: One clear sentence.
     setCompetitorLoading(true); setCompetitorData(null);
     try {
       const res = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1200,
-          system: "You are an SEO competitor analyst for UAE e-commerce brands.",
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500,
+          system: "You are an SEO competitor analyst for UAE e-commerce brands. Be specific and actionable.",
           messages: [{ role: "user", content: `Analyse this competitor of THUGFIT (UAE gym activewear, thugfit.ae): ${competitorUrl}
 
-Based on what you know about the UAE fitness market and typical e-commerce SEO strategies:
-
-1. List 10 keywords they likely rank for that THUGFIT should target
-2. List 5 content gaps — topics they cover that THUGFIT should also cover
-3. List 3 backlink strategies THUGFIT should copy from them
-4. Give an overall strategy recommendation in 2 sentences
-
 Return as JSON only:
-{"keywords":["kw1","kw2"],"content_gaps":["gap1"],"backlink_strategies":["s1"],"recommendation":"text"}` }] }) });
+{
+  "keywords": ["10 specific UAE keywords they rank for that THUGFIT should target"],
+  "article_topics": ["5 specific blog article titles THUGFIT should publish to close content gaps — make them ready-to-use titles like 'Best Gym Shorts for Dubai Heat 2026'"],
+  "outreach_targets": ["3 specific types of UAE websites/influencers to contact for backlinks — be specific e.g. 'Dubai fitness bloggers on Instagram with 10k-100k followers'"],
+  "next_action": "One sentence: the single most important thing THUGFIT should do this week based on this analysis"
+}` }] }) });
       const data = await res.json();
-      const parsed = JSON.parse(data.content[0].text.replace(/\`\`\`json|\`\`\`/g, "").trim());
+      const parsed = JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
       setCompetitorData(parsed);
-      // Add competitor keywords to queue
+
+      const actions = [];
+
+      // 1. Add keywords to queue
       if (parsed.keywords?.length > 0) {
         await Promise.all(parsed.keywords.map(kw => sbFetch("/rest/v1/seo_keyword_queue", "POST", { keyword: kw, used: false, priority: 7 }).catch(() => {})));
-        showToast(`✅ Analysis done — ${parsed.keywords.length} keywords added to your queue`);
+        actions.push(`${parsed.keywords.length} keywords queued`);
       }
+
+      // 2. Add article topics as high-priority keywords
+      if (parsed.article_topics?.length > 0) {
+        await Promise.all(parsed.article_topics.map(topic => sbFetch("/rest/v1/seo_keyword_queue", "POST", { keyword: topic, used: false, priority: 9 }).catch(() => {})));
+        actions.push(`${parsed.article_topics.length} article topics queued`);
+      }
+
+      showToast(`✅ Done — ${actions.join(" · ")} — articles will publish automatically`);
     } catch (e) { showToast("❌ " + e.message); }
     finally { setCompetitorLoading(false); }
   };
@@ -1829,23 +1838,31 @@ Return as JSON only:
                   </button>
                 </div>
                 {competitorData && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 16 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: "#a78bfa", marginBottom: 10 }}>🔑 Keywords added to your queue ({competitorData.keywords?.length})</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{competitorData.keywords?.map((kw, i) => <span key={i} style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "3px 10px", borderRadius: 20, fontSize: 11 }}>{kw}</span>)}</div>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 14 }}>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: "#4ade80", marginBottom: 8 }}>📝 Content Gaps to Fill</div>
-                        {competitorData.content_gaps?.map((g, i) => <div key={i} style={{ fontSize: 12, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e1e30" }}>{i+1}. {g}</div>)}
-                      </div>
-                      <div style={{ background: "#0d0d16", border: "1px solid #2a2a40", borderRadius: 10, padding: 14 }}>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: "#fb923c", marginBottom: 8 }}>🔗 Backlink Strategies to Copy</div>
-                        {competitorData.backlink_strategies?.map((s, i) => <div key={i} style={{ fontSize: 12, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e1e30" }}>{i+1}. {s}</div>)}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* Keywords queued */}
+                    <div style={{ background: "#0d0d16", border: "1px solid #7c3aed40", borderRadius: 10, padding: 14 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", marginBottom: 8 }}>✅ {(competitorData.keywords?.length||0) + (competitorData.article_topics?.length||0)} items added to your article queue — will publish automatically</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                        {competitorData.keywords?.map((kw, i) => <span key={i} style={{ background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa", padding: "2px 9px", borderRadius: 20, fontSize: 11 }}>{kw}</span>)}
+                        {competitorData.article_topics?.map((t, i) => <span key={i} style={{ background: "#16a34a20", border: "1px solid #16a34a40", color: "#4ade80", padding: "2px 9px", borderRadius: 20, fontSize: 11 }}>📝 {t}</span>)}
                       </div>
                     </div>
-                    {competitorData.recommendation && (
-                      <div style={{ background: "#16a34a10", border: "1px solid #16a34a30", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#4ade80" }}>💡 {competitorData.recommendation}</div>
+                    {/* Outreach targets */}
+                    {competitorData.outreach_targets?.length > 0 && (
+                      <div style={{ background: "#0d0d16", border: "1px solid #fb923c30", borderRadius: 10, padding: 14 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "#fb923c", marginBottom: 8 }}>🔗 Who to contact for backlinks — go to Backlink Outreach Emails tab to generate ready-to-send emails:</div>
+                        {competitorData.outreach_targets.map((t, i) => (
+                          <div key={i} style={{ fontSize: 12, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e1e30", display:"flex", gap:6 }}>
+                            <span style={{color:"#fb923c", fontWeight:700, flexShrink:0}}>{i+1}.</span> {t}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Next action */}
+                    {competitorData.next_action && (
+                      <div style={{ background: "#16a34a10", border: "1px solid #16a34a40", borderRadius: 8, padding: "12px 14px", fontSize: 13, color: "#4ade80", fontWeight: 600 }}>
+                        🎯 This week: {competitorData.next_action}
+                      </div>
                     )}
                   </div>
                 )}
