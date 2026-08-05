@@ -297,11 +297,16 @@ Additional requirements:
     finally { setGenerating(false); }
   };
 
-  const copyPost = () => {
+  const copyPost = async () => {
     navigator.clipboard.writeText(postText);
     setCopied(true);
     showToast("✅ Post copied to clipboard");
     setTimeout(() => setCopied(false), 3000);
+    // Log so Staff Tasks auto-validates "Post to Google Business Profile"
+    await fetch(`${SUPA_URL}/rest/v1/seo_activity_log`, {
+      method:"POST", headers:{apikey:SUPA_KEY, Authorization:`Bearer ${SUPA_KEY}`, "Content-Type":"application/json", Prefer:"return=representation"},
+      body: JSON.stringify({action:"gbp_post_manual", status:"completed", title:`GBP post copied: ${postTopic}`})
+    }).catch(()=>{});
   };
 
   const saveOAuth = () => {
@@ -482,6 +487,59 @@ const STAFF_ACCOUNTS = [
   { email: "staff2@thugfit.ae",   password: "staff2026",   name: "Staff 2", role: "staff"  },
 ];
 
+// ─── Task Validation Config ───────────────────────────────────────────────────
+const PHOTO_TASKS = new Set([
+  "Check Instagram comments & DMs",
+  "Check Facebook comments & messages",
+  "Check thugfit.ae orders",
+  "Check Train & Earn applications",
+  "Send Train & Earn outreach emails",
+  "Review Google Search Console",
+]);
+
+const AUTO_TASK_CHECKS = {
+  "Review AI-generated posts": async () => {
+    const r = await fetch(`${SUPA_URL}/rest/v1/posts?or=(status.eq.approved,status.eq.rejected)&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+  "Generate monthly content plan": async () => {
+    const m=new Date().getMonth()+1, y=new Date().getFullYear();
+    const r = await fetch(`${SUPA_URL}/rest/v1/monthly_plans?month=eq.${m}&year=eq.${y}&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+  "Schedule next week content": async () => {
+    const r = await fetch(`${SUPA_URL}/rest/v1/posts?status=eq.scheduled&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+  "Post to Google Business Profile": async () => {
+    const today=new Date().toISOString().split("T")[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/seo_activity_log?action=eq.gbp_post_manual&created_at=gte.${today}T00:00:00&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+  "Run Product SEO Scanner": async () => {
+    const today=new Date().toISOString().split("T")[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/seo_activity_log?action=eq.product_seo_scan&created_at=gte.${today}T00:00:00&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+  "Run Page Speed Check": async () => {
+    const today=new Date().toISOString().split("T")[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/seo_activity_log?action=eq.page_speed_check&created_at=gte.${today}T00:00:00&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+  "Check broken links and 404 errors": async () => {
+    const today=new Date().toISOString().split("T")[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/seo_activity_log?action=eq.broken_link_check&created_at=gte.${today}T00:00:00&select=id&limit=1`,
+      {headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`}});
+    const d = await r.json(); return Array.isArray(d) && d.length > 0;
+  },
+};
+
 async function taskFetch(path, method="GET", body=null) {
   const h = {"Content-Type":"application/json", apikey:TASK_SB_KEY, Authorization:`Bearer ${TASK_SB_KEY}`, Prefer:"return=representation"};
   const r = await fetch(`${TASK_SB_URL}${path}`, {method, headers:h, body:body?JSON.stringify(body):undefined});
@@ -545,6 +603,8 @@ function StaffTaskManager({ platformUser }) {
   const [notes,      setNotes]      = useState({});
   const [expanded,   setExpanded]   = useState(null);
   const [toast,      setToast]      = useState("");
+  const [proofImages, setProofImages] = useState({});
+  const [autoValidating, setAutoValidating] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
   const dow = new Date().getDay(); // 0=Sun,1=Mon,...5=Fri,6=Sat
@@ -564,6 +624,34 @@ function StaffTaskManager({ platformUser }) {
       if (t.freq === "monthly") return dom === 1;
       return false;
     });
+  };
+
+  const runAutoValidation = async (tasks) => {
+    setAutoValidating(true);
+    const updates = [];
+    for (const task of tasks) {
+      if (task.status === "done") continue;
+      const checkFn = AUTO_TASK_CHECKS[task.task_name];
+      if (!checkFn) continue;
+      try {
+        const passed = await checkFn();
+        if (passed) {
+          await taskFetch(`/rest/v1/staff_task_log?id=eq.${task.id}`, "PATCH", {
+            status: "done", completed_at: new Date().toISOString(),
+            completed_by: "System", note: "Auto-validated by system",
+            auto_validated: true,
+          });
+          updates.push(task.id);
+        }
+      } catch {}
+    }
+    if (updates.length > 0) {
+      setTodayTasks(prev => prev.map(t =>
+        updates.includes(t.id) ? {...t, status:"done", completed_at:new Date().toISOString(), completed_by:"System", note:"Auto-validated by system", auto_validated:true} : t
+      ));
+      showToast(`✅ ${updates.length} task${updates.length>1?"s":""} auto-validated`);
+    }
+    setAutoValidating(false);
   };
 
   const loadTodayTasks = async () => {
@@ -590,6 +678,8 @@ function StaffTaskManager({ platformUser }) {
         return { ...t, instructions: t.description || def?.instructions || "" };
       });
       setTodayTasks(merged);
+      // Run auto-validation after tasks load
+      setTimeout(() => runAutoValidation(merged), 500);
     } catch(e) { showToast("Error loading tasks"); }
     finally { setLoading(false); }
   };
@@ -619,12 +709,22 @@ function StaffTaskManager({ platformUser }) {
     try {
       await taskFetch(`/rest/v1/staff_task_log?id=eq.${task.id}`, "PATCH", {
         status: "done", completed_at: new Date().toISOString(),
-        completed_by: user.name, note: notes[task.id] || ""
+        completed_by: user.name, note: notes[task.id] || "",
+        proof_image: proofImages[task.id] || null, auto_validated: false,
       });
       setTodayTasks(p => p.map(t => t.id===task.id ? {...t, status:"done", completed_at:new Date().toISOString()} : t));
       showToast("✅ Task marked as done");
     } catch(e) { showToast("❌ " + e.message); }
     finally { setCompleting(p => ({...p, [task.id]: false})); }
+  };
+
+  const handleProofUpload = (e, taskId) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { showToast("⚠ Image too large — max 3MB"); return; }
+    const reader = new FileReader();
+    reader.onload = () => setProofImages(prev => ({...prev, [taskId]: reader.result}));
+    reader.readAsDataURL(file);
   };
 
   const done  = todayTasks.filter(t => t.status==="done").length;
@@ -722,19 +822,71 @@ function StaffTaskManager({ platformUser }) {
                       {/* Expanded - instructions + done button */}
                       {isOpen && (
                         <div style={{borderTop:"1px solid #1C2537", padding:"14px 16px", background:"#07091A"}}>
+                          {/* Validation type badge */}
+                          <div style={{display:"flex", gap:8, marginBottom:10, alignItems:"center"}}>
+                            {AUTO_TASK_CHECKS[task.task_name] && (
+                              <span style={{fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:10, background:"#2563eb20", color:"#60a5fa", border:"1px solid #2563eb30"}}>
+                                🤖 Auto-validates
+                              </span>
+                            )}
+                            {PHOTO_TASKS.has(task.task_name) && (
+                              <span style={{fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:10, background:"#f59e0b20", color:"#fbbf24", border:"1px solid #f59e0b30"}}>
+                                📸 Screenshot optional
+                              </span>
+                            )}
+                            {task.auto_validated && (
+                              <span style={{fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:10, background:"#16a34a20", color:"#4ade80", border:"1px solid #16a34a30"}}>
+                                ✅ System verified
+                              </span>
+                            )}
+                          </div>
                           <div style={{fontSize:12, fontWeight:700, color:"#6B7EB8", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em"}}>How to do this:</div>
                           <div style={{fontSize:13, color:"#94a3b8", lineHeight:1.8, marginBottom:14}}>{task.instructions}</div>
                           {!isDone && (
-                            <div style={{display:"flex", gap:8, alignItems:"center"}}>
-                              <input value={notes[task.id]||""} onChange={e=>setNotes(p=>({...p,[task.id]:e.target.value}))} placeholder="Add a note (optional)..." style={{...s.input, flex:1, fontSize:12, padding:"8px 12px"}} />
-                              <button onClick={()=>completeTask(task)} disabled={completing[task.id]}
-                                style={{...s.btn("#16a34a"), padding:"8px 18px", fontSize:12, whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6}}>
-                                {completing[task.id]?<div style={{width:14,height:14,border:"2px solid #ffffff40",borderTop:"2px solid #fff",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>:null}
-                                {completing[task.id]?"Saving...":"✓ Mark as Done"}
-                              </button>
+                            <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                              {/* Photo upload for proof-required tasks */}
+                              {PHOTO_TASKS.has(task.task_name) && (
+                                <div style={{background:"#0a0a14", border:"1px solid #f59e0b30", borderRadius:8, padding:"12px 14px"}}>
+                                  <div style={{fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:8}}>📸 Upload proof screenshot (optional but recommended)</div>
+                                  {proofImages[task.id] ? (
+                                    <div style={{display:"flex", alignItems:"center", gap:10}}>
+                                      <img src={proofImages[task.id]} alt="proof" style={{width:80, height:50, objectFit:"cover", borderRadius:6, border:"1px solid #16a34a40"}} />
+                                      <div>
+                                        <div style={{fontSize:11, color:"#4ade80", fontWeight:700}}>✅ Screenshot uploaded</div>
+                                        <button onClick={()=>setProofImages(p=>({...p,[task.id]:null}))} style={{fontSize:10, color:"#f87171", background:"none", border:"none", cursor:"pointer", padding:0, marginTop:2}}>Remove</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <label style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"8px 14px", background:"#13131f", border:"1px dashed #f59e0b50", borderRadius:7, width:"fit-content"}}>
+                                      <span style={{fontSize:18}}>📷</span>
+                                      <span style={{fontSize:12, color:"#94a3b8"}}>Click to upload screenshot</span>
+                                      <input type="file" accept="image/*" onChange={e=>handleProofUpload(e,task.id)} style={{display:"none"}} />
+                                    </label>
+                                  )}
+                                </div>
+                              )}
+                              <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                                <input value={notes[task.id]||""} onChange={e=>setNotes(p=>({...p,[task.id]:e.target.value}))} placeholder="Add a note (optional)..." style={{...s.input, flex:1, fontSize:12, padding:"8px 12px"}} />
+                                <button onClick={()=>completeTask(task)}
+                                  disabled={completing[task.id]}
+                                  style={{...s.btn("#16a34a"), padding:"8px 18px", fontSize:12, whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6}}>
+                                  {completing[task.id]?<div style={{width:14,height:14,border:"2px solid #ffffff40",borderTop:"2px solid #fff",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>:null}
+                                  {completing[task.id]?"Saving...":"✓ Mark as Done"}
+                                </button>
+                              </div>
                             </div>
                           )}
-                          {isDone && task.note && <div style={{fontSize:12, color:"#4ade80"}}>Note: {task.note}</div>}
+                          {isDone && (
+                            <div style={{display:"flex", flexDirection:"column", gap:6}}>
+                              {task.note && <div style={{fontSize:12, color:"#4ade80"}}>Note: {task.note}</div>}
+                              {task.proof_image && (
+                                <div>
+                                  <div style={{fontSize:11, color:"#64748b", marginBottom:4}}>Proof submitted:</div>
+                                  <img src={task.proof_image} alt="proof" style={{width:120, height:75, objectFit:"cover", borderRadius:6, border:"1px solid #16a34a40"}} />
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -829,7 +981,11 @@ function StaffTaskManager({ platformUser }) {
                       </div>
                       <div style={{fontSize:11, fontWeight:700, color:task.status==="done"?"#4ade80":"#f87171", textAlign:"right"}}>
                         {task.status==="done"
-                          ? `Done ${task.completed_at?new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}):""}`
+                          ? <div>
+                              <div>Done {task.completed_at?new Date(task.completed_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                              {task.auto_validated && <div style={{fontSize:9, color:"#60a5fa"}}>🤖 Auto-verified</div>}
+                              {task.proof_image && <img src={task.proof_image} alt="proof" style={{width:50,height:32,objectFit:"cover",borderRadius:4,marginTop:4,border:"1px solid #16a34a40",display:"block"}} />}
+                            </div>
                           : "PENDING"}
                       </div>
                     </div>
@@ -1166,6 +1322,7 @@ Return ONLY JSON: {"seo_title":"max 60 chars with keyword","meta_desc":"max 155 
 
   const applyAllProducts = async () => {
     for (const p of products.filter(p => !p.applied)) { await applyProductSeo(p); }
+    await sbFetch("/rest/v1/seo_activity_log", "POST", {action:"product_seo_scan", status:"completed", title:"Product SEO scan completed"}).catch(()=>{});
     showToast("✅ All products updated");
   };
 
@@ -1213,6 +1370,7 @@ What to do: One clear sentence.
 (continue for all 5 fixes)` }] }) });
       const d = await res.json();
       setSpeedData({ mobScore, deskScore, failed, fixes: d.content[0].text });
+      await sbFetch("/rest/v1/seo_activity_log", "POST", {action:"page_speed_check", status:"completed", title:`Page speed: Mobile ${mobScore}/100, Desktop ${deskScore}/100`}).catch(()=>{});
     } catch (e) { showToast("❌ " + e.message); }
     finally { setSpeedLoading(false); }
   };
@@ -1280,6 +1438,7 @@ Return as JSON only:
         }
       }
       setBrokenLinks(found);
+      await sbFetch("/rest/v1/seo_activity_log", "POST", {action:"broken_link_check", status:"completed", title:`Broken link scan: ${found.length} issues found`}).catch(()=>{});
       showToast(found.length === 0 ? "✅ No broken links found!" : `⚠ Found ${found.length} broken links`);
     } catch (e) { showToast("❌ " + e.message); }
     finally { setBrokenLoading(false); }
@@ -2450,8 +2609,11 @@ Return JSON only, no markdown:
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>API Connections</div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Gemini API Key <span style={{ color: C.amber }}>(required for image generation)</span></div>
-              <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..."
-                style={{ width: "100%", background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13 }} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <input type="text" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..."
+                  style={{ flex: 1, background: "#080C14", border: `1px solid ${geminiKey ? C.teal : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13 }} />
+                {geminiKey && <div style={{ padding: "9px 12px", borderRadius: 8, background: `${C.teal}15`, border: `1px solid ${C.teal}30`, color: C.teal, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>✓ Saved</div>}
+              </div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>Get free key → aistudio.google.com → Get API key → Create API key</div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
