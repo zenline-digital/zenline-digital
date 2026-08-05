@@ -2158,7 +2158,9 @@ export default function App() {
   const [algorithmGuide, setAlgorithmGuide] = useState(null);
   const [algoStep, setAlgoStep]       = useState(0); // 0=idle 1=competitors 2=algorithm 3=scheduling
   const [algoData, setAlgoData]       = useState({});
-  const month = 7; const year = 2026;
+  const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1);
+  const [calYear,  setCalYear]  = useState(new Date().getFullYear());
+  const month = calMonth; const year = calYear;
 
   // ── Load persisted data on startup ──────────────────────────────────────────
   useEffect(() => {
@@ -3047,6 +3049,7 @@ Return JSON only, no markdown:
     const firstDow = new Date(year, month - 1, 1).getDay();
     const today = new Date();
     const [selectedDay, setSelectedDay] = useState(null);
+    // eslint-disable-next-line no-unused-vars
 
     // Map all scheduled/published posts to their day
     const allQueuePosts = [...posts, ...pending];
@@ -3072,11 +3075,19 @@ Return JSON only, no markdown:
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Calendar</div>
             <div style={{ fontSize: 12, color: C.muted }}>{MONTHS[month - 1]} {year} · {Object.values(postsByDay).flat().length} posts scheduled</div>
           </div>
-          {algorithmGuide && (
-            <div style={{ padding: "6px 12px", background: `${C.purple}15`, border: `1px solid ${C.purple}30`, borderRadius: 8, fontSize: 11, color: C.purple }}>
-              ⚡ Algorithm active · {algorithmGuide.posts_per_week || 7}/week · Optimal times applied
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={() => { let m = calMonth - 1, y = calYear; if (m < 1) { m = 12; y--; } setCalMonth(m); setCalYear(y); setSelectedDay(null); }}
+              style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>‹</button>
+            <button onClick={() => { setCalMonth(new Date().getMonth() + 1); setCalYear(new Date().getFullYear()); setSelectedDay(null); }}
+              style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: C.muted, cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>Today</button>
+            <button onClick={() => { let m = calMonth + 1, y = calYear; if (m > 12) { m = 1; y++; } setCalMonth(m); setCalYear(y); setSelectedDay(null); }}
+              style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>›</button>
+            {algorithmGuide && (
+              <div style={{ padding: "6px 12px", background: `${C.purple}15`, border: `1px solid ${C.purple}30`, borderRadius: 8, fontSize: 11, color: C.purple, marginLeft: 8 }}>
+                ⚡ Algorithm active · {algorithmGuide.posts_per_week || 7}/week · Optimal times applied
+              </div>
+            )}
+          </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, background: C.border, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
           {dowLabels.map(d => <div key={d} style={{ background: C.card, padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{d}</div>)}
