@@ -117,11 +117,12 @@ const AGENTS = [
 ];
 
 const NAV = [
-  { id: "dashboard", label: "Dashboard",       icon: "▤" },
-  { id: "planner",   label: "Monthly Planner", icon: "◫" },
-  { id: "queue",     label: "Content Queue",   icon: "≡" },
-  { id: "approval",  label: "Approvals",       icon: "✓" },
-  { id: "calendar",  label: "Calendar",        icon: "⊞" },
+  { id: "dashboard", label: "Dashboard",        icon: "▤" },
+  { id: "algorithm", label: "Algorithm Engine", icon: "⚡" },
+  { id: "planner",   label: "Monthly Planner",  icon: "◫" },
+  { id: "queue",     label: "Content Queue",    icon: "≡" },
+  { id: "approval",  label: "Approvals",        icon: "✓" },
+  { id: "calendar",  label: "Calendar",         icon: "⊞" },
   { id: "seo",       label: "Auto SEO",        icon: "🔍" },
   { id: "settings",  label: "Settings",        icon: "⚙" },
   { id: "tasks",     label: "Staff Tasks",      icon: "✅" },
@@ -2120,6 +2121,9 @@ export default function App() {
   const [metaToken, setMetaToken]     = useState("");
   const [metaPosting, setMetaPosting] = useState(null);
   const [metaConnecting, setMetaConnecting] = useState(false);
+  const [algorithmGuide, setAlgorithmGuide] = useState(null);
+  const [algoStep, setAlgoStep]       = useState(0); // 0=idle 1=competitors 2=algorithm 3=scheduling
+  const [algoData, setAlgoData]       = useState({});
   const month = 7; const year = 2026;
 
   // ── Load persisted data on startup ──────────────────────────────────────────
@@ -2149,6 +2153,12 @@ export default function App() {
         });
         const mcData = await mcr.json();
         if (Array.isArray(mcData) && mcData.length > 0) setMetaConfig(mcData[0]);
+
+        const agr = await fetch(`${SUPA_URL}/rest/v1/algorithm_guide?order=generated_at.desc&limit=1`, {
+          headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+        });
+        const agData = await agr.json();
+        if (Array.isArray(agData) && agData.length > 0) setAlgorithmGuide(agData[0]);
 
         const postr = await fetch(`${SUPA_URL}/rest/v1/posts?order=created_at.desc&limit=100`, {
           headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
@@ -2356,6 +2366,34 @@ Return JSON only, no markdown:
     }
   }
 
+  // ── Auto-schedule helper ─────────────────────────────────────────────────
+  function getNextOptimalSlot(guide, existingPosts) {
+    if (!guide?.best_times) return null;
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const usedSlots = new Set(existingPosts.filter(p => p.scheduled_at).map(p => p.scheduled_at?.slice(0, 16)));
+    const now = new Date();
+    // Search next 60 days
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      const dayName = dayNames[d.getDay()];
+      const times = guide.best_times[dayName] || [];
+      for (const t of times) {
+        const [h, m] = t.split(":").map(Number);
+        const slot = new Date(d);
+        slot.setHours(h, m, 0, 0);
+        if (slot > now) {
+          const key = slot.toISOString().slice(0, 16);
+          if (!usedSlots.has(key)) {
+            usedSlots.add(key);
+            return slot.toISOString();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   async function approvePost(post, approvedPlatforms) {
     try {
       const allPlatforms = ["instagram", "facebook", "tiktok"];
@@ -2365,11 +2403,22 @@ Return JSON only, no markdown:
       const remaining = allPlatforms.filter(p => !totalApproved.includes(p));
 
       if (remaining.length === 0) {
-        if (post.id) await supa.patch("posts", { status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(",") }, `id=eq.${post.id}`);
+        // Auto-schedule if algorithm guide exists
+        const allPosts = [...posts, ...pending];
+        const scheduledAt = algorithmGuide ? getNextOptimalSlot(algorithmGuide, allPosts) : null;
+        const updateData = scheduledAt
+          ? { status: "scheduled", scheduled_at: scheduledAt, platform: totalApproved.join(","), approved_platforms: totalApproved.join(",") }
+          : { status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(",") };
+        if (post.id) await supa.patch("posts", updateData, `id=eq.${post.id}`);
         setPending(p => p.filter(x => x.id !== post.id && x !== post));
-        setPosts(p => [...p.filter(x => x.id !== post.id), { ...post, status: "approved", platform: totalApproved.join(","), approved_platforms: totalApproved.join(","), remaining_platforms: "" }]);
+        setPosts(p => [...p.filter(x => x.id !== post.id), { ...post, ...updateData, remaining_platforms: "" }]);
         setSelectedPost(null);
-        notify(`✓ All platforms approved — moved to Content Queue`);
+        if (scheduledAt) {
+          const dt = new Date(scheduledAt);
+          notify(`✅ Auto-scheduled for ${dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`);
+        } else {
+          notify(`✓ All platforms approved — moved to Content Queue`);
+        }
       } else {
         const updatedPost = { ...post, approved_platforms: totalApproved.join(","), remaining_platforms: remaining.join(","), platform: totalApproved.join(",") };
         if (post.id) await supa.patch("posts", { approved_platforms: totalApproved.join(","), remaining_platforms: remaining.join(",") }, `id=eq.${post.id}`);
@@ -2769,26 +2818,286 @@ Return JSON only, no markdown:
     );
   }
 
-  function Calendar() {
-    const dowLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const dim = new Date(year, month, 0).getDate();
-    const firstDow = new Date(year, month - 1, 1).getDay();
-    const offset = firstDow === 0 ? 6 : firstDow - 1;
+  function AlgorithmEngine() {
+    const steps = [
+      { n: 1, label: "Scan Competitors", desc: "Analysing Gymshark, Lululemon, Nike, Adidas UAE, GymNation + 1 more", icon: "🔍" },
+      { n: 2, label: "Read Instagram Algorithm", desc: "Current 2025 UAE algorithm — best times, formats, frequency", icon: "📊" },
+      { n: 3, label: "Auto-Schedule All Posts", desc: "Applying optimal times to your content queue automatically", icon: "📅" },
+    ];
+
+    async function runEngine() {
+      if (algoStep > 0) return;
+      setAlgoStep(1);
+      try {
+        // Step 1: Competitor analysis
+        const r1 = await fetch("/api/algorithm-engine", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: 1 })
+        });
+        const d1 = await r1.json();
+        if (!d1.success) throw new Error(d1.error || "Step 1 failed");
+        setAlgoData(prev => ({ ...prev, competitorData: d1.data }));
+
+        setAlgoStep(2);
+        // Step 2: Algorithm research
+        const r2 = await fetch("/api/algorithm-engine", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: 2 })
+        });
+        const d2 = await r2.json();
+        if (!d2.success) throw new Error(d2.error || "Step 2 failed");
+        setAlgoData(prev => ({ ...prev, algorithmData: d2.data }));
+
+        setAlgoStep(3);
+        // Step 3: Build final guide + save
+        const r3 = await fetch("/api/algorithm-engine", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: 3, competitorData: d1.data, algorithmData: d2.data })
+        });
+        const d3 = await r3.json();
+        if (!d3.success) throw new Error(d3.error || "Step 3 failed");
+        setAlgorithmGuide(d3.guide);
+
+        // Auto-schedule any already-approved posts
+        const approvedPosts = posts.filter(p => p.status === "approved");
+        let scheduledCount = 0;
+        for (const p of approvedPosts) {
+          const allCurrentPosts = [...posts, ...pending];
+          const slot = getNextOptimalSlot(d3.guide, allCurrentPosts);
+          if (slot && p.id) {
+            await supa.patch("posts", { status: "scheduled", scheduled_at: slot }, `id=eq.${p.id}`);
+            setPosts(prev => prev.map(x => x.id === p.id ? { ...x, status: "scheduled", scheduled_at: slot } : x));
+            scheduledCount++;
+          }
+        }
+
+        setAlgoStep(0);
+        notify(`✅ Algorithm Engine complete! ${scheduledCount > 0 ? `${scheduledCount} posts auto-scheduled.` : "Future posts will auto-schedule on approval."}`);
+        log("Algorithm Engine", "Analysis complete", `Optimal times set · ${approvedPosts.length} posts processed`);
+      } catch (e) {
+        setAlgoStep(0);
+        notify("❌ Engine error: " + e.message, "err");
+      }
+    }
+
+    const isRunning = algoStep > 0;
+    const guide = algorithmGuide;
+
     return (
       <div>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Calendar</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>{MONTHS[month - 1]} {year} — posts will appear here once scheduled</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, background: C.border, borderRadius: 12, overflow: "hidden" }}>
-          {dowLabels.map(d => <div key={d} style={{ background: C.card, padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{d}</div>)}
-          {Array(offset).fill(0).map((_, i) => <div key={`e${i}`} style={{ background: "#080B12", minHeight: 72 }} />)}
-          {Array(dim).fill(0).map((_, i) => {
-            const d = i + 1; const isToday = d === 4 && month === 8;
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Algorithm Engine</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 24 }}>One click — scans UAE competitors, reads the Instagram algorithm, auto-schedules all your posts at peak times.</div>
+
+        {/* Step cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }}>
+          {steps.map(s => {
+            const done = guide && !isRunning;
+            const active = algoStep === s.n;
+            const pending2 = isRunning && algoStep < s.n;
             return (
-              <div key={d} style={{ background: C.card, minHeight: 72, padding: "7px 8px", borderTop: isToday ? `2px solid ${C.purple}` : "2px solid transparent" }}>
-                <div style={{ fontSize: 12, color: isToday ? C.purple : C.muted, fontWeight: isToday ? 700 : 400 }}>{d}</div>
+              <div key={s.n} style={{ ...card, border: `1px solid ${active ? C.purple : done ? C.teal : C.border}`, transition: "border 0.3s", position: "relative", overflow: "hidden" }}>
+                {active && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${C.purple},${C.blue})`, animation: "none" }} />}
+                <div style={{ fontSize: 24, marginBottom: 10 }}>{done ? "✅" : active ? "⏳" : s.icon}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, color: active ? C.purple : done ? C.teal : C.text }}>Step {s.n}: {s.label}</div>
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{s.desc}</div>
+                {active && <div style={{ marginTop: 10, fontSize: 11, color: C.purple, fontWeight: 600 }}>Running…</div>}
+                {done && <div style={{ marginTop: 10, fontSize: 11, color: C.teal, fontWeight: 600 }}>Complete ✓</div>}
               </div>
             );
           })}
+        </div>
+
+        {/* What it analyses */}
+        {!guide && !isRunning && (
+          <div style={{ ...card, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>What the engine analyses automatically</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+              {[["🕐", "Best posting times", "UAE audience peak hours"], ["📱", "Best content formats", "Reels vs carousels vs posts"], ["📆", "Weekly frequency", "How many posts per week"], ["#", "Hashtag strategy", "Size, mix, placement"], ["✍️", "Caption style", "Hook, CTA, length"], ["🏆", "Competitor timing", "Gap analysis vs rivals"]].map(([ic, t, d]) => (
+                <div key={t} style={{ padding: "12px 14px", background: C.surf, borderRadius: 8, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 18, marginBottom: 6 }}>{ic}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{t}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{d}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Output section */}
+        {!guide && !isRunning && (
+          <div style={{ ...card, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Output — auto-applied to your content queue</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+              <div style={{ padding: "14px 16px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.teal, marginBottom: 4 }}>✅ All approved posts scheduled</div>
+                <div style={{ fontSize: 11, color: C.muted }}>At optimal times automatically</div>
+              </div>
+              <div style={{ padding: "14px 16px", background: `${C.purple}10`, border: `1px solid ${C.purple}30`, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.purple, marginBottom: 4 }}>✅ Algorithm guide saved</div>
+                <div style={{ fontSize: 11, color: C.muted }}>Refreshes monthly automatically</div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", background: C.surf, borderRadius: 8, fontSize: 11, color: C.muted, lineHeight: 1.7 }}>
+              One click → AI reads the latest Instagram algorithm → finds competitor posting patterns → calculates your best UAE times → schedules everything. Re-run monthly to stay current.
+            </div>
+          </div>
+        )}
+
+        {/* Guide results */}
+        {guide && !isRunning && (
+          <div style={{ ...card, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: C.teal }}>✅ Algorithm Guide Active</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Best Posting Times (UAE GMT+4)</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {Object.entries(guide.best_times || {}).map(([day, times]) => (
+                    <div key={day} style={{ display: "flex", gap: 8, fontSize: 11 }}>
+                      <span style={{ color: C.muted, width: 72, textTransform: "capitalize" }}>{day}</span>
+                      <span style={{ color: C.teal }}>{(times || []).join("  ·  ")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Strategy</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ padding: "8px 12px", background: C.surf, borderRadius: 6, fontSize: 11 }}>
+                    <span style={{ color: C.muted }}>Posts/week: </span><span style={{ color: C.text, fontWeight: 600 }}>{guide.posts_per_week || 7}</span>
+                  </div>
+                  {guide.content_mix && (
+                    <div style={{ padding: "8px 12px", background: C.surf, borderRadius: 6, fontSize: 11 }}>
+                      <span style={{ color: C.muted }}>Mix: </span>
+                      <span style={{ color: C.purple }}>Reels {guide.content_mix.reels}%</span>
+                      <span style={{ color: C.muted }}> · </span>
+                      <span style={{ color: C.blue }}>Carousels {guide.content_mix.carousels}%</span>
+                      <span style={{ color: C.muted }}> · </span>
+                      <span style={{ color: C.teal }}>Posts {guide.content_mix.single_image}%</span>
+                    </div>
+                  )}
+                  {guide.hashtag_strategy && (
+                    <div style={{ padding: "8px 12px", background: C.surf, borderRadius: 6, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+                      <strong style={{ color: C.text }}>Hashtags:</strong> {guide.hashtag_strategy?.slice(0, 120)}
+                    </div>
+                  )}
+                  {guide.competitor_gaps && (
+                    <div style={{ padding: "8px 12px", background: `${C.amber}10`, border: `1px solid ${C.amber}20`, borderRadius: 6, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+                      <strong style={{ color: C.amber }}>Opportunity:</strong> {guide.competitor_gaps?.slice(0, 150)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 14, fontSize: 11, color: C.muted }}>
+              Guide generated {new Date(guide.generated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · Re-run monthly for fresh insights
+            </div>
+          </div>
+        )}
+
+        {/* CTA Button */}
+        <button onClick={runEngine} disabled={isRunning}
+          style={{ padding: "14px 32px", borderRadius: 10, border: "none", background: isRunning ? C.border : "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", cursor: isRunning ? "not-allowed" : "pointer", fontSize: 15, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 10 }}>
+          {isRunning ? `Step ${algoStep}/3 running…` : guide ? "🔄 Re-run Algorithm Engine" : "⚡ Run Algorithm Engine"}
+        </button>
+        {!guide && <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Takes about 30-60 seconds · Run once a month</div>}
+      </div>
+    );
+  }
+
+  function Calendar() {
+    const dowLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const dim = new Date(year, month, 0).getDate();
+    const firstDow = new Date(year, month - 1, 1).getDay();
+    const today = new Date();
+    const [selectedDay, setSelectedDay] = useState(null);
+
+    // Map all scheduled/published posts to their day
+    const allQueuePosts = [...posts, ...pending];
+    const postsByDay = {};
+    allQueuePosts.forEach(p => {
+      if (!p.scheduled_at) return;
+      const d = new Date(p.scheduled_at);
+      if (d.getFullYear() === year && d.getMonth() + 1 === month) {
+        const day = d.getDate();
+        if (!postsByDay[day]) postsByDay[day] = [];
+        postsByDay[day].push(p);
+      }
+    });
+
+    const statusColor = { scheduled: C.purple, published: C.teal, approved: C.blue, pending_approval: C.amber };
+
+    const dayPosts = selectedDay ? (postsByDay[selectedDay] || []) : [];
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Calendar</div>
+            <div style={{ fontSize: 12, color: C.muted }}>{MONTHS[month - 1]} {year} · {Object.values(postsByDay).flat().length} posts scheduled</div>
+          </div>
+          {algorithmGuide && (
+            <div style={{ padding: "6px 12px", background: `${C.purple}15`, border: `1px solid ${C.purple}30`, borderRadius: 8, fontSize: 11, color: C.purple }}>
+              ⚡ Algorithm active · {algorithmGuide.posts_per_week || 7}/week · Optimal times applied
+            </div>
+          )}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, background: C.border, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+          {dowLabels.map(d => <div key={d} style={{ background: C.card, padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{d}</div>)}
+          {Array(firstDow).fill(0).map((_, i) => <div key={`e${i}`} style={{ background: "#080B12", minHeight: 80 }} />)}
+          {Array(dim).fill(0).map((_, i) => {
+            const d = i + 1;
+            const isToday = d === today.getDate() && month === today.getMonth() + 1 && year === today.getFullYear();
+            const dayPostList = postsByDay[d] || [];
+            const isSelected = selectedDay === d;
+            return (
+              <div key={d} onClick={() => setSelectedDay(isSelected ? null : d)}
+                style={{ background: isSelected ? `${C.purple}15` : C.card, minHeight: 80, padding: "7px 6px", borderTop: isToday ? `2px solid ${C.purple}` : "2px solid transparent", cursor: dayPostList.length > 0 ? "pointer" : "default", transition: "background 0.15s" }}>
+                <div style={{ fontSize: 12, color: isToday ? C.purple : C.muted, fontWeight: isToday ? 700 : 400, marginBottom: 4 }}>{d}</div>
+                {dayPostList.slice(0, 3).map((p, pi) => (
+                  <div key={pi} style={{ fontSize: 9, padding: "2px 4px", borderRadius: 3, marginBottom: 2, background: `${statusColor[p.status] || C.muted}25`, color: statusColor[p.status] || C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {p.status === "published" ? "✓" : "●"} {new Date(p.scheduled_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                ))}
+                {dayPostList.length > 3 && <div style={{ fontSize: 9, color: C.muted }}>+{dayPostList.length - 3} more</div>}
+              </div>
+            );
+          })}
+        </div>
+        {selectedDay && dayPosts.length > 0 && (
+          <div style={{ ...card, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+              {MONTHS[month - 1]} {selectedDay} — {dayPosts.length} post{dayPosts.length > 1 ? "s" : ""}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {dayPosts.map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: C.surf, borderRadius: 8, border: `1px solid ${C.border}` }}>
+                  {p.image_url && <div style={{ width: 40, height: 40, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}><img src={p.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.topic}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{new Date(p.scheduled_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })} · {p.content_type?.replace("_", " ")}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, background: `${statusColor[p.status]}20`, color: statusColor[p.status] || C.muted, fontWeight: 600 }}>
+                      {p.status === "published" ? "✓ Posted" : p.status}
+                    </span>
+                    {p.status === "scheduled" && (
+                      <button onClick={() => publishToMeta(p)} disabled={metaPosting === p.id}
+                        style={{ padding: "4px 10px", borderRadius: 5, border: "none", background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}>
+                        {metaPosting === p.id ? "…" : "🚀 Post"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {[["scheduled", C.purple, "Scheduled"], ["published", C.teal, "Published"], ["approved", C.blue, "Approved"]].map(([s, c, l]) => (
+            <div key={s} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.muted }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} /> {l}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -3036,8 +3345,9 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
           )}
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: (page === "seo" || page === "tasks") ? 0 : 24 }}>
-          {page === "dashboard" && <Dashboard />}
-          {page === "planner"   && <Planner />}
+          {page === "dashboard"  && <Dashboard />}
+          {page === "algorithm"  && <AlgorithmEngine />}
+          {page === "planner"    && <Planner />}
           {page === "approval"  && <Approval />}
           {page === "queue"     && <Queue />}
           {page === "calendar"  && <Calendar />}
