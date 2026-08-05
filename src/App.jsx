@@ -2468,12 +2468,31 @@ Return JSON only, no markdown:
     }
   }
 
-  function rejectPost(post) {
-    if (post.id) supa.patch("posts", { status: "rejected" }, `id=eq.${post.id}`);
-    setPending(p => p.filter(x => x !== post));
-    setSelectedPost(null);
-    notify("Post rejected — regenerate from the Planner");
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectComment, setRejectComment] = useState("");
+
+  function openRejectModal(post) {
+    setRejectModal(post);
+    setRejectComment("");
   }
+
+  async function confirmReject() {
+    const post = rejectModal;
+    if (!post) return;
+    if (post.id) await supa.patch("posts", { status: "rejected", rejection_note: rejectComment }, `id=eq.${post.id}`);
+    setPending(p => p.filter(x => x !== post && x.id !== post.id));
+    setPosts(p => {
+      const exists = p.find(x => x.id === post.id);
+      if (exists) return p.map(x => x.id === post.id ? { ...x, status: "rejected", rejection_note: rejectComment } : x);
+      return [{ ...post, status: "rejected", rejection_note: rejectComment }, ...p];
+    });
+    setRejectModal(null);
+    setRejectComment("");
+    setSelectedPost(null);
+    notify("Post rejected \u2014 feedback saved for team");
+  }
+
+  function rejectPost(post) { openRejectModal(post); }
 
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
@@ -2656,9 +2675,9 @@ Return JSON only, no markdown:
               <button onClick={doApprove} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: selectedCount > 0 ? C.teal : C.border, color: selectedCount > 0 ? "#fff" : C.muted, cursor: selectedCount > 0 ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }}>
                 ✓ Approve {selectedCount > 0 ? `(${selectedCount})` : ""}
               </button>
-              <button onClick={() => { rejectPost(post); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
+              <button onClick={() => { openRejectModal(post); setPlatformApprovals({ instagram: false, facebook: false, tiktok: false }); }}
                 style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${C.danger}`, background: "transparent", color: C.danger, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>
-                ✗ Reject All
+                ✗ Reject
               </button>
             </div>
           </div>
@@ -2716,7 +2735,9 @@ Return JSON only, no markdown:
     const [schedDate, setSchedDate] = useState("");
     const [schedTime, setSchedTime] = useState("09:00");
     const [expanded, setExpanded] = useState(null);
-    const all = [...pending.map(p => ({ ...p, _s: "pending_approval" })), ...posts.map(p => ({ ...p, _s: p.status }))];
+    const [queueFilter, setQueueFilter] = useState("all");
+    const allRaw = [...pending.map(p => ({ ...p, _s: "pending_approval" })), ...posts.map(p => ({ ...p, _s: p.status }))];
+    const all = queueFilter === "all" ? allRaw : allRaw.filter(p => p._s === queueFilter);
 
     async function schedulePost(post) {
       if (!schedDate) { notify("Pick a date first", "err"); return; }
@@ -2743,9 +2764,17 @@ Return JSON only, no markdown:
 
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 700 }}>Content Queue</div>
-          <div style={{ fontSize: 12, color: C.muted }}>{all.length} post{all.length !== 1 ? "s" : ""} total</div>
+          <div style={{ fontSize: 12, color: C.muted }}>{allRaw.length} post{allRaw.length !== 1 ? "s" : ""} total</div>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+          {[["all","All"], ["pending_approval","Pending"], ["approved","Approved"], ["scheduled","Scheduled"], ["published","Published"], ["rejected","Rejected"]].map(([val, label]) => (
+            <button key={val} onClick={() => setQueueFilter(val)}
+              style={{ padding: "5px 12px", borderRadius: 20, border: `1px solid ${queueFilter === val ? statusColor[val] || C.purple : C.border}`, background: queueFilter === val ? `${statusColor[val] || C.purple}20` : "transparent", color: queueFilter === val ? statusColor[val] || C.purple : C.muted, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
+              {label} {val !== "all" && allRaw.filter(p => p._s === val).length > 0 ? `(${allRaw.filter(p => p._s === val).length})` : ""}
+            </button>
+          ))}
         </div>
         {all.length === 0
           ? <div style={{ ...card, textAlign: "center", padding: "64px 20px", color: C.muted }}>No content yet. Open the Planner and click ⚡ Generate on any post.</div>
@@ -2797,21 +2826,35 @@ Return JSON only, no markdown:
                   </div>
                 </div>
                 {expanded === i && (
-                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "12px 16px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <div style={{ fontSize: 12, color: C.muted, flex: 1 }}>
-                      {post.caption?.slice(0, 120)}{(post.caption?.length || 0) > 120 ? "..." : ""}
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {(post._s === "approved" || post._s === "scheduled") && (
-                        <button onClick={() => { setSelectedPost(post); setPending(p => [...p, {...post, status:"pending_approval", _s:"pending_approval"}]); setPosts(p => p.filter(x => x !== post)); setPage("approval"); }}
-                          style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
-                          ✏️ Re-review
+                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "14px 16px" }}>
+                    {post.rejection_note && (
+                      <div style={{ background: `${C.danger}12`, border: `1px solid ${C.danger}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.danger, marginBottom: 4 }}>✗ Rejection Feedback</div>
+                        <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>{post.rejection_note}</div>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 12, color: C.muted, flex: 1 }}>
+                        {post.caption?.slice(0, 120)}{(post.caption?.length || 0) > 120 ? "..." : ""}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                        {(post._s === "approved" || post._s === "scheduled") && (
+                          <button onClick={() => { setSelectedPost(post); setPending(p => [...p, {...post, status:"pending_approval", _s:"pending_approval"}]); setPosts(p => p.filter(x => x !== post)); setPage("approval"); }}
+                            style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                            ✏️ Re-review
+                          </button>
+                        )}
+                        {post._s === "rejected" && (
+                          <button onClick={() => { supa.patch("posts", { status: "pending_approval", rejection_note: null }, `id=eq.${post.id}`); setPosts(p => p.map(x => x.id === post.id ? {...x, status:"pending_approval", rejection_note:null} : x)); notify("Post sent back for re-approval"); }}
+                            style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.amber}`, background: `${C.amber}15`, color: C.amber, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                            ↩ Re-submit for Approval
+                          </button>
+                        )}
+                        <button onClick={() => deletePost(post)}
+                          style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.danger}`, background: `${C.danger}15`, color: C.danger, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+                          🗑 Delete
                         </button>
-                      )}
-                      <button onClick={() => deletePost(post)}
-                        style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.danger}`, background: `${C.danger}15`, color: C.danger, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
-                        🗑 Delete
-                      </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3407,6 +3450,36 @@ INSERT INTO seo_automation (is_enabled) VALUES (false) ON CONFLICT DO NOTHING;`}
       </div>
 
       {/* Toast */}
+      {/* Reject with comment modal */}
+      {rejectModal && (
+        <div style={{ position: "fixed", inset: 0, background: "#00000080", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.danger}40`, borderRadius: 16, padding: 28, maxWidth: 480, width: "100%" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.danger, marginBottom: 6 }}>✗ Reject Post</div>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 18 }}>
+              <strong style={{ color: C.text }}>{rejectModal.topic}</strong>
+              <br />Leave feedback so the team knows what to fix or rework.
+            </div>
+            <textarea
+              value={rejectComment}
+              onChange={e => setRejectComment(e.target.value)}
+              placeholder="e.g. Image doesn't match the caption. Caption too generic — needs more THUGFIT brand voice. Try a stronger hook in the first line."
+              rows={4}
+              style={{ width: "100%", background: C.surf, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "10px 14px", fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" }}
+            />
+            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+              <button onClick={() => setRejectModal(null)}
+                style={{ padding: "9px 18px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+                Cancel
+              </button>
+              <button onClick={confirmReject}
+                style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: C.danger, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }}>
+                ✗ Confirm Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {notice && (
         <div style={{
           position: "fixed", bottom: 24, right: 24, padding: "12px 18px", zIndex: 999, maxWidth: 360,
