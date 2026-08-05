@@ -2858,15 +2858,18 @@ Return JSON only, no markdown:
         if (!d3.success) throw new Error(d3.error || "Step 3 failed");
         setAlgorithmGuide(d3.guide);
 
-        // Auto-schedule any already-approved posts
+        // Auto-schedule any already-approved posts using the new guide
         const approvedPosts = posts.filter(p => p.status === "approved");
         let scheduledCount = 0;
+        // Track used slots locally so each post gets a unique time
+        const alreadyUsedPosts = [...posts, ...pending].filter(p => p.scheduled_at);
         for (const p of approvedPosts) {
-          const allCurrentPosts = [...posts, ...pending];
-          const slot = getNextOptimalSlot(d3.guide, allCurrentPosts);
+          const slot = getNextOptimalSlot(d3.guide, [...alreadyUsedPosts]);
           if (slot && p.id) {
             await supa.patch("posts", { status: "scheduled", scheduled_at: slot }, `id=eq.${p.id}`);
             setPosts(prev => prev.map(x => x.id === p.id ? { ...x, status: "scheduled", scheduled_at: slot } : x));
+            // Add this slot to used list so next post gets a different time
+            alreadyUsedPosts.push({ scheduled_at: slot });
             scheduledCount++;
           }
         }
