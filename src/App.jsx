@@ -2861,19 +2861,20 @@ Return JSON only, no markdown:
                   <button disabled={metaConnecting || !metaToken} onClick={async () => {
                     setMetaConnecting(true);
                     try {
-                      const r = await fetch("/api/meta-exchange", {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ token: metaToken })
+                      // Save token directly to Supabase meta_config
+                      const r = await fetch(`${SUPA_URL}/rest/v1/meta_config?page_id=eq.1178919721975130`, {
+                        method: "PATCH",
+                        headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+                        body: JSON.stringify({ page_access_token: metaToken, updated_at: new Date().toISOString() })
                       });
-                      const d = await r.json();
-                      if (d.success) {
+                      if (r.ok) {
                         const mc = await fetch(`${SUPA_URL}/rest/v1/meta_config?limit=1`, { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } });
                         const mcData = await mc.json();
                         if (Array.isArray(mcData) && mcData.length > 0) setMetaConfig(mcData[0]);
                         setMetaToken("");
-                        notify("✅ Meta connected — permanent token saved!");
+                        notify("✅ Meta connected — token saved!");
                       } else {
-                        notify("❌ " + (d.error || "Connection failed"), "err");
+                        notify("❌ Failed to save token — check Supabase", "err");
                       }
                     } catch(e) { notify("❌ " + e.message, "err"); }
                     setMetaConnecting(false);
