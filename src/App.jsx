@@ -2116,6 +2116,10 @@ export default function App() {
   const [geminiKey, setGeminiKey]     = useState(() => localStorage.getItem("zl_gemini_key") || "");
   const [brandVoice, setBrandVoice]   = useState("Premium, raw, aspirational. We speak to serious UAE gym-goers who demand elite performance and quality activewear.");
   const [platformApprovals, setPlatformApprovals] = useState({ instagram: false, facebook: false, tiktok: false });
+  const [metaConfig, setMetaConfig]   = useState(null);
+  const [metaToken, setMetaToken]     = useState("");
+  const [metaPosting, setMetaPosting] = useState(null);
+  const [metaConnecting, setMetaConnecting] = useState(false);
   const month = 7; const year = 2026;
 
   // ── Load persisted data on startup ──────────────────────────────────────────
@@ -2140,6 +2144,12 @@ export default function App() {
           const p = plans[0];
           setPlan({ id: p.id, month: p.month, year: p.year, data: p.plan_data });
         }
+        const mcr = await fetch(`${SUPA_URL}/rest/v1/meta_config?limit=1`, {
+          headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+        });
+        const mcData = await mcr.json();
+        if (Array.isArray(mcData) && mcData.length > 0) setMetaConfig(mcData[0]);
+
         const postr = await fetch(`${SUPA_URL}/rest/v1/posts?order=created_at.desc&limit=100`, {
           headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
         });
@@ -2168,6 +2178,35 @@ export default function App() {
     setTimeout(() => setNotice(null), 5000);
   }
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // ── Publish to Instagram + Facebook ─────────────────────────────────────────
+  async function publishToMeta(post, platforms = ["instagram", "facebook"]) {
+    if (!metaConfig?.page_access_token) {
+      notify("⚠ Connect Meta in Settings first", "err"); return;
+    }
+    setMetaPosting(post.id);
+    try {
+      const r = await fetch("/api/meta-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id, platforms })
+      });
+      const data = await r.json();
+      if (data.success) {
+        setPosts(p => p.map(x => x.id === post.id ? { ...x, status: "published" } : x));
+        const igOk = data.report?.instagram?.published;
+        const fbOk = data.report?.facebook?.posted;
+        notify(`✅ Posted! ${igOk ? "Instagram ✓" : ""} ${fbOk ? "Facebook ✓" : ""}`);
+      } else {
+        const igErr = data.report?.instagram?.error;
+        const fbErr = data.report?.facebook?.error;
+        notify("❌ " + (igErr || fbErr || data.error || "Post failed"), "err");
+      }
+    } catch (e) {
+      notify("❌ " + e.message, "err");
+    }
+    setMetaPosting(null);
+  }
 
   // ── Generate Monthly Plan ────────────────────────────────────────────────────
   async function genPlan() {
@@ -2647,6 +2686,12 @@ Return JSON only, no markdown:
                         📅 Schedule
                       </button>
                     )}
+                    {(post._s === "approved" || post._s === "scheduled") && (
+                      <button onClick={() => publishToMeta(post)} disabled={metaPosting === post.id}
+                        style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: metaPosting === post.id ? C.border : "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", cursor: metaPosting === post.id ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}>
+                        {metaPosting === post.id ? "Posting…" : "🚀 Post Now"}
+                      </button>
+                    )}
                     {post._s === "scheduled" && (
                       <button onClick={() => unschedule(post)}
                         style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: `${C.amber}20`, color: C.amber, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
@@ -2790,6 +2835,57 @@ Return JSON only, no markdown:
                 {geminiKey ? "✓ Gemini API key entered" : "⚠ Gemini API key missing — add above to enable image generation"}
               </div>
             </div>
+          </div>
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Meta (Instagram + Facebook)</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Connect to enable one-click posting to @thugfit.ae Instagram and Thugfit Facebook Page.</div>
+            {metaConfig?.page_access_token ? (
+              <div>
+                <div style={{ padding: "10px 14px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8, fontSize: 12, color: C.teal, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span>✓ Meta connected — Instagram + Facebook auto-posting ready</span>
+                  <button onClick={() => setMetaToken("reconnect")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Reconnect</button>
+                </div>
+                <div style={{ fontSize: 11, color: C.muted }}>Page ID: 1178919721975130 · IG: @thugfit.ae</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+                  1. Go to <span style={{ color: C.purple }}>developers.facebook.com → Tools → Graph API Explorer</span><br/>
+                  2. Select ZenLine Digital app → Add permissions → Generate token<br/>
+                  3. Paste the token below and click Connect
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="password" value={metaToken} onChange={e => setMetaToken(e.target.value)}
+                    placeholder="Paste Page Access Token from Graph API Explorer..."
+                    style={{ flex: 1, background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 12 }} />
+                  <button disabled={metaConnecting || !metaToken} onClick={async () => {
+                    setMetaConnecting(true);
+                    try {
+                      const r = await fetch("/api/meta-exchange", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token: metaToken })
+                      });
+                      const d = await r.json();
+                      if (d.success) {
+                        const mc = await fetch(`${SUPA_URL}/rest/v1/meta_config?limit=1`, { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } });
+                        const mcData = await mc.json();
+                        if (Array.isArray(mcData) && mcData.length > 0) setMetaConfig(mcData[0]);
+                        setMetaToken("");
+                        notify("✅ Meta connected — permanent token saved!");
+                      } else {
+                        notify("❌ " + (d.error || "Connection failed"), "err");
+                      }
+                    } catch(e) { notify("❌ " + e.message, "err"); }
+                    setMetaConnecting(false);
+                  }} style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: metaConnecting ? C.border : "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", cursor: metaConnecting ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", fontFamily: "inherit" }}>
+                    {metaConnecting ? "Connecting…" : "Connect"}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
+                  ⚠ Also add META_APP_ID and META_APP_SECRET to Vercel env vars. App ID: 1780492096639096. Get App Secret from Meta Developer → ZenLine Digital → App Settings → Basic.
+                </div>
+              </div>
+            )}
           </div>
           <div style={card}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Brand Voice</div>
