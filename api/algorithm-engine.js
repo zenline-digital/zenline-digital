@@ -70,21 +70,32 @@ const UAE_ALGORITHM_DATA = {
 
 const COMPETITOR_DATA = {
   competitors: [
-    { name: "Gymshark",        posts_per_week: 7,  content_mix: { reels: 65, carousels: 20, single: 15 }, peak_times_gmt4: ["07:00","19:00"], weakness: "Generic content not UAE-specific" },
-    { name: "Lululemon",       posts_per_week: 5,  content_mix: { reels: 50, carousels: 30, single: 20 }, peak_times_gmt4: ["08:00","18:00"], weakness: "Premium price barrier weak UAE positioning" },
-    { name: "Nike Training",   posts_per_week: 10, content_mix: { reels: 70, carousels: 20, single: 10 }, peak_times_gmt4: ["07:00","20:00"], weakness: "Too broad no niche activewear focus" },
-    { name: "Adidas UAE",      posts_per_week: 6,  content_mix: { reels: 60, carousels: 25, single: 15 }, peak_times_gmt4: ["08:00","19:00"], weakness: "Athlete-focused not gym-goer lifestyle" },
-    { name: "GymNation UAE",   posts_per_week: 4,  content_mix: { reels: 40, carousels: 30, single: 30 }, peak_times_gmt4: ["08:00","19:00"], weakness: "Low production quality facility-focused not apparel" },
-    { name: "Under Armour ME", posts_per_week: 5,  content_mix: { reels: 55, carousels: 25, single: 20 }, peak_times_gmt4: ["07:00","18:00"], weakness: "Sports performance not lifestyle activewear" }
+    // UAE / GCC competitors
+    { name: "GymNation UAE",    region: "UAE",    posts_per_week: 4,  content_mix: { reels: 40, carousels: 30, single: 30 }, peak_times_gmt4: ["08:00","19:00"], weakness: "Facility-focused not premium apparel" },
+    { name: "Squatwolf",        region: "UAE",    posts_per_week: 8,  content_mix: { reels: 60, carousels: 25, single: 15 }, peak_times_gmt4: ["07:00","19:00"], weakness: "Male-focused misses female fitness market" },
+    { name: "Adidas UAE",       region: "UAE",    posts_per_week: 6,  content_mix: { reels: 60, carousels: 25, single: 15 }, peak_times_gmt4: ["08:00","19:00"], weakness: "Athlete-focused not everyday gym lifestyle" },
+    { name: "Nike Training ME", region: "UAE",    posts_per_week: 10, content_mix: { reels: 70, carousels: 20, single: 10 }, peak_times_gmt4: ["07:00","20:00"], weakness: "Too broad no premium niche positioning" },
+    { name: "Under Armour ME",  region: "UAE",    posts_per_week: 5,  content_mix: { reels: 55, carousels: 25, single: 20 }, peak_times_gmt4: ["07:00","18:00"], weakness: "Sports performance not lifestyle activewear" },
+    { name: "2XU Middle East",  region: "UAE",    posts_per_week: 3,  content_mix: { reels: 45, carousels: 30, single: 25 }, peak_times_gmt4: ["07:00","18:00"], weakness: "Compression focus too technical not lifestyle" },
+    // Global competitors
+    { name: "Gymshark",         region: "Global", posts_per_week: 7,  content_mix: { reels: 65, carousels: 20, single: 15 }, peak_times_gmt4: ["07:00","19:00"], weakness: "UK-centric culture does not resonate in UAE" },
+    { name: "Lululemon",        region: "Global", posts_per_week: 5,  content_mix: { reels: 50, carousels: 30, single: 20 }, peak_times_gmt4: ["08:00","18:00"], weakness: "Premium price barrier limited UAE retail presence" },
+    { name: "Alphalete",        region: "Global", posts_per_week: 6,  content_mix: { reels: 70, carousels: 20, single: 10 }, peak_times_gmt4: ["07:00","19:00"], weakness: "US influencer culture not localised for MENA" },
+    { name: "Gymreapers",       region: "Global", posts_per_week: 5,  content_mix: { reels: 55, carousels: 25, single: 20 }, peak_times_gmt4: ["07:00","18:00"], weakness: "Powerlifting niche too narrow for general fitness" },
+    { name: "Ryderwear",        region: "Global", posts_per_week: 6,  content_mix: { reels: 60, carousels: 25, single: 15 }, peak_times_gmt4: ["08:00","19:00"], weakness: "Australia-first no MENA community building" },
+    { name: "Puma Training",    region: "Global", posts_per_week: 8,  content_mix: { reels: 65, carousels: 20, single: 15 }, peak_times_gmt4: ["07:00","19:00"], weakness: "Mass market dilutes premium positioning" }
   ],
   opportunities: [
-    "Bilingual Arabic and English content no competitor does this well",
-    "Local UAE gym partnerships and shoutouts",
-    "Ramadan and UAE National Day campaigns",
-    "Dubai and Abu Dhabi location-tagged content",
-    "Premium activewear lifestyle content gap in market"
+    "Bilingual Arabic and English content no competitor does this well in UAE",
+    "Local UAE gym partnerships and fitness influencer collabs",
+    "Ramadan and UAE National Day campaigns with culturally relevant content",
+    "Dubai and Abu Dhabi location-tagged lifestyle content",
+    "Premium mid-range gap between budget brands and Lululemon price point",
+    "Female fitness market underserved by current UAE activewear brands",
+    "GCC expansion Kuwait Saudi Arabia Qatar all buying online activewear",
+    "International shipping angle targeting MENA diaspora worldwide"
   ],
-  recommended_gaps: "No competitor owns the premium UAE gym activewear niche with local cultural relevance. THUGFIT opportunity: bilingual content UAE fitness influencer collabs Dubai gym culture content."
+  recommended_gaps: "THUGFIT opportunity: own the premium UAE gym lifestyle niche with bilingual content local influencer collabs and cultural moments. Globally position as the authentic MENA activewear brand shipping worldwide."
 };
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
