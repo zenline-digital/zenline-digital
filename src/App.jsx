@@ -2770,11 +2770,17 @@ Return JSON only, no markdown:
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>API Connections</div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Gemini API Key <span style={{ color: C.amber }}>(required for image generation)</span></div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="text" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..."
-                  style={{ flex: 1, background: "#080C14", border: `1px solid ${geminiKey ? C.teal : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13 }} />
-                {geminiKey && <div style={{ padding: "9px 12px", borderRadius: 8, background: `${C.teal}15`, border: `1px solid ${C.teal}30`, color: C.teal, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>✓ Saved</div>}
-              </div>
+              {geminiKey ? (
+                <div style={{ padding: "10px 14px", background: `${C.teal}10`, border: `1px solid ${C.teal}30`, borderRadius: 8, fontSize: 12, color: C.teal, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>✓ Gemini API key connected</span>
+                  <button onClick={() => { setGeminiKey(""); localStorage.removeItem("zl_gemini_key"); }} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Change key</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..."
+                    style={{ flex: 1, background: "#080C14", border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13 }} />
+                </div>
+              )}
               <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>Get free key → aistudio.google.com → Get API key → Create API key</div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
