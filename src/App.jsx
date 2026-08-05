@@ -1119,6 +1119,8 @@ function SEO() {
   const [googleIndexingKey, setGoogleIndexingKey] = useState("");
   const [brokenLinks, setBrokenLinks] = useState([]);
   const [brokenLoading, setBrokenLoading] = useState(false);
+  const [fixingLinks, setFixingLinks] = useState(false);
+  const [fixProgress, setFixProgress] = useState("");
   const [altLoading, setAltLoading] = useState(false);
   const [altResults, setAltResults] = useState([]);
 
@@ -1529,6 +1531,64 @@ Return JSON only:
       showToast(found.length === 0 ? "✅ No broken links found!" : `⚠ Found ${found.length} broken links`);
     } catch (e) { showToast("❌ " + e.message); }
     finally { setBrokenLoading(false); }
+  };
+
+  const fixAllBrokenLinks = async () => {
+    if (!config?.wp_username || !config?.wp_app_password) { showToast("⚠ Add WordPress credentials in Settings first"); return; }
+    if (brokenLinks.length === 0) { showToast("No broken links to fix"); return; }
+    setFixingLinks(true);
+    const wpBase = config.wp_url || "https://thugfit.ae";
+    const creds = btoa(`${config.wp_username}:${config.wp_app_password}`);
+    let fixed = 0, failed = 0;
+
+    // Group broken links by post title
+    const byPost = {};
+    for (const b of brokenLinks) {
+      if (!byPost[b.post]) byPost[b.post] = [];
+      byPost[b.post].push(b.link);
+    }
+
+    for (const [postTitle, links] of Object.entries(byPost)) {
+      setFixProgress(`Fixing "${postTitle.slice(0,40)}…"`);
+      try {
+        // Find the post by title
+        const searchRes = await fetch(`${wpBase}/wp-json/wp/v2/posts?search=${encodeURIComponent(postTitle)}&per_page=5&status=publish`, {
+          headers: { Authorization: `Basic ${creds}` }
+        });
+        const posts = await searchRes.json();
+        const post = Array.isArray(posts) ? posts.find(p => p.title?.rendered === postTitle) : null;
+        if (!post) { failed++; continue; }
+
+        // Remove all broken links from content — keep anchor text, remove the <a> tag
+        let content = post.content?.rendered || "";
+        for (const link of links) {
+          // Escape special regex chars in URL
+          const escaped = link.replace(/[.*+?^${}()|[\]\]/g, "\$&");
+          // Remove <a href="brokenlink"...>text</a> → keep text
+          content = content.replace(new RegExp(`<a[^>]*href=["']${escaped}["'][^>]*>(.*?)<\/a>`, "gi"), "$1");
+        }
+
+        // Update post in WordPress
+        const updateRes = await fetch(`${wpBase}/wp-json/wp/v2/posts/${post.id}`, {
+          method: "PUT",
+          headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ content })
+        });
+        if (updateRes.ok) {
+          fixed++;
+          // Log to activity log
+          await sbFetch("/rest/v1/seo_activity_log", "POST", {
+            action: "broken_link_fix", status: "completed",
+            title: `Fixed ${links.length} broken link(s) in "${postTitle.slice(0,60)}"`
+          }).catch(() => {});
+        } else { failed++; }
+      } catch { failed++; }
+    }
+
+    setBrokenLinks([]);
+    setFixingLinks(false);
+    setFixProgress("");
+    showToast(`✅ Fixed ${fixed} post${fixed !== 1 ? "s" : ""} — ${failed > 0 ? `${failed} failed` : "all clean"}`);
   };
 
   const triggerAltTags = async () => {
@@ -1950,19 +2010,26 @@ Return JSON only:
             {openSection === "broken" && (
               <div style={{ background: "#13131f", border: "1px solid #1e1e30", borderRadius: "0 0 10px 10px", padding: 20, marginBottom: 8, marginTop: -8 }}>
                 <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, lineHeight: 1.6 }}>Scans your published blog posts for broken links (404 errors). Broken links hurt SEO. Staff fixes them in WordPress by editing the post and removing or replacing the broken link.</div>
-                <button onClick={checkBrokenLinks} disabled={brokenLoading} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                  {brokenLoading ? <><SeoSpinner size={14} /> Scanning…</> : "🔍 Scan for Broken Links"}
-                </button>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                  <button onClick={checkBrokenLinks} disabled={brokenLoading || fixingLinks} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+                    {brokenLoading ? <><SeoSpinner size={14} /> Scanning…</> : "🔍 Scan for Broken Links"}
+                  </button>
+                  {brokenLinks.length > 0 && (
+                    <button onClick={fixAllBrokenLinks} disabled={fixingLinks} style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: fixingLinks ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, background: fixingLinks ? "#1e1e30" : "#16a34a", color: fixingLinks ? "#3a3a5c" : "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+                      {fixingLinks ? <><SeoSpinner size={14} /> {fixProgress || "Fixing…"}</> : `🔧 Fix All ${brokenLinks.length} Links Automatically`}
+                    </button>
+                  )}
+                </div>
                 {brokenLinks.length === 0 && !brokenLoading && <div style={{ fontSize: 12, color: "#3a3a5c", textAlign: "center", padding: "16px 0" }}>Click scan to check your posts</div>}
                 {brokenLinks.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 12, color: "#f87171", marginBottom: 10, fontWeight: 700 }}>⚠ {brokenLinks.length} broken link{brokenLinks.length !== 1 ? "s" : ""} found — fix these in WordPress:</div>
+                    <div style={{ fontSize: 12, color: "#f87171", marginBottom: 10, fontWeight: 700 }}>⚠ {brokenLinks.length} broken link{brokenLinks.length !== 1 ? "s" : ""} found — click "Fix All" to remove them automatically:</div>
                     {brokenLinks.map((b, i) => (
                       <div key={i} style={{ background: "#0d0d16", border: "1px solid #ef444430", borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
                         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>In post: <strong style={{ color: "#e2e8f0" }}>{b.post}</strong></div>
                         <div style={{ fontSize: 12, color: "#f87171", marginBottom: 4, wordBreak: "break-all" }}>{b.link}</div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#f87171" }}>Status: {b.status}</div>
-                        <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 4 }}>Fix: WordPress → Posts → Edit "{b.post}" → find this link → remove or update it</div>
+                        <div style={{ fontSize: 11, color: "#3a3a5c", marginTop: 4 }}>Click "Fix All" above to remove automatically, or manually: WordPress → Posts → Edit → find and remove this link</div>
                       </div>
                     ))}
                   </div>
