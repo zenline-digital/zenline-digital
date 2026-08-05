@@ -2113,7 +2113,7 @@ export default function App() {
   const [isWorking, setIsWorking]     = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
   const [notice, setNotice]           = useState(null);
-  const [geminiKey, setGeminiKey]     = useState("");
+  const [geminiKey, setGeminiKey]     = useState(() => localStorage.getItem("zl_gemini_key") || "");
   const [brandVoice, setBrandVoice]   = useState("Premium, raw, aspirational. We speak to serious UAE gym-goers who demand elite performance and quality activewear.");
   const [platformApprovals, setPlatformApprovals] = useState({ instagram: false, facebook: false, tiktok: false });
   const month = 7; const year = 2026;
@@ -2128,7 +2128,7 @@ export default function App() {
         const settings = await sr.json();
         if (Array.isArray(settings)) {
           const gemini = settings.find(s => s.key === "gemini_key");
-          if (gemini?.value) setGeminiKey(gemini.value);
+          if (gemini?.value) { setGeminiKey(gemini.value); localStorage.setItem("zl_gemini_key", gemini.value); }
           const bv = settings.find(s => s.key === "brand_voice");
           if (bv?.value) setBrandVoice(bv.value);
         }
@@ -2752,6 +2752,7 @@ Return JSON only, no markdown:
   function Settings() {
     async function saveSettings() {
       try {
+        localStorage.setItem("zl_gemini_key", geminiKey);
         const r1 = await supa.upsert("app_settings", { key: "gemini_key", value: geminiKey }, "key");
         const r2 = await supa.upsert("app_settings", { key: "brand_voice", value: brandVoice }, "key");
         if (r1?.error) throw new Error(r1.error.message);
