@@ -774,6 +774,40 @@ function StaffTaskManager({ platformUser }) {
 
       <div style={{padding:"24px 28px", maxWidth:900, margin:"0 auto"}}>
 
+        {/* MONTHLY CONTENT WORKFLOW — always visible */}
+        <div style={{background:"linear-gradient(135deg,#0d1a2e,#0d1117)", border:"1px solid #8B7CF830", borderRadius:14, padding:22, marginBottom:24}}>
+          <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
+            <div style={{fontSize:22}}>⚡</div>
+            <div>
+              <div style={{fontWeight:800, fontSize:15, color:"#8B7CF8"}}>Monthly Content Workflow</div>
+              <div style={{fontSize:11, color:"#6B7EB8", marginTop:1}}>Follow these steps every month to keep THUGFIT posting automatically</div>
+            </div>
+          </div>
+          <div style={{display:"flex", flexDirection:"column", gap:10}}>
+            {[
+              { step:1, icon:"📅", title:"Generate Monthly Plan", desc:"Go to Monthly Planner → click Generate Plan. This creates 28 posts for the month with captions, hashtags and content type.", where:"Monthly Planner" },
+              { step:2, icon:"🖼️", title:"Add Images & Approve Posts", desc:"Go to Approvals → for each post, upload an image (or generate one in Image Studio) → select Instagram and Facebook → click Approve. Do this for all posts.", where:"Approvals" },
+              { step:3, icon:"⚡", title:"Run Algorithm Engine", desc:"Go to Algorithm Engine → click Run Algorithm Engine. It will automatically schedule all your approved posts at the best UAE posting times.", where:"Algorithm Engine" },
+              { step:4, icon:"📲", title:"Posts Auto-Publish", desc:"Done! The system checks every day at 6 AM and automatically posts to Instagram and Facebook at the scheduled times. No further action needed.", where:"Automatic" },
+            ].map(({ step, icon, title, desc, where }) => (
+              <div key={step} style={{background:"#07091A", border:"1px solid #1C2537", borderRadius:10, padding:"12px 16px", display:"flex", gap:14, alignItems:"flex-start"}}>
+                <div style={{width:32, height:32, borderRadius:8, background: step===4?"#16a34a20":"#8B7CF820", border:`1px solid ${step===4?"#16a34a40":"#8B7CF840"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0}}>{icon}</div>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:3}}>
+                    <div style={{fontSize:10, fontWeight:800, color:"#8B7CF8", background:"#8B7CF815", padding:"2px 8px", borderRadius:20}}>STEP {step}</div>
+                    <div style={{fontWeight:700, fontSize:13, color:"#E2E8F7"}}>{title}</div>
+                    <div style={{marginLeft:"auto", fontSize:10, color:"#3a3a5c", background:"#1C2537", padding:"2px 8px", borderRadius:6}}>{where}</div>
+                  </div>
+                  <div style={{fontSize:12, color:"#6B7EB8", lineHeight:1.6}}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:14, padding:"10px 14px", background:"#00C9A710", border:"1px solid #00C9A730", borderRadius:8, fontSize:11, color:"#00C9A7"}}>
+            💡 <strong>Run this once per month</strong> — on the 1st of every month, generate a new plan, approve the posts, then run the Algorithm Engine again to schedule the new batch.
+          </div>
+        </div>
+
         {/* TODAY'S TASKS */}
         {view==="today" && (
           <>
