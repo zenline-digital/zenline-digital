@@ -7,12 +7,22 @@
     },
     "api/seo-cron.js": {
       "maxDuration": 60
+    },
+    "api/algorithm-engine.js": {
+      "maxDuration": 60
+    },
+    "api/meta-cron.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/seo-cron",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/meta-cron",
+      "schedule": "0 * * * *"
     }
   ],
   "rewrites": [
