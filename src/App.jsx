@@ -156,7 +156,7 @@ export default function App() {
   const [loadedAgents, setLoadedAgents] = useState(new Set());    // which agent histories are loaded
   const [allSkills, setAllSkills]       = useState([]);
   const [changeLog, setChangeLog]       = useState([]);
-  const [chatInput, setChatInput]       = useState("");
+  const chatInputRef                    = useRef(null);
   const [isSending, setIsSending]       = useState(false);
   const [pendingSkill, setPendingSkill] = useState(null);         // { agentId, text }
   const [pendingPlan, setPendingPlan]   = useState(null);         // parsed plan array from chat
@@ -277,10 +277,10 @@ export default function App() {
 
   // ── Send chat message ─────────────────────────────────────────────────────
   async function sendMessage() {
-    const text = chatInput.trim();
+    const text = chatInputRef.current?.value?.trim() || "";
     if (!text || isSending) return;
     const agentId = chatAgentId;
-    setChatInput("");
+    if (chatInputRef.current) chatInputRef.current.value = "";
     setIsSending(true);
     setPendingPlan(null);
 
@@ -1332,14 +1332,13 @@ ALTER TABLE staff_tasks     DISABLE ROW LEVEL SECURITY;`;
           <div style={{ padding: "14px 20px", borderTop: `1px solid ${C.border}`, background: C.surf, flexShrink: 0 }}>
             <div style={{ display: "flex", gap: 10 }}>
               <textarea
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
+                ref={chatInputRef}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                 placeholder={`Tell the ${agentInfo?.name || currentAgent?.name} what you need...`}
                 rows={2}
                 style={{ ...inp, flex: 1, resize: "none", lineHeight: 1.5, padding: "10px 14px" }}
               />
-              <button onClick={sendMessage} disabled={isSending || !chatInput.trim()} style={btn(C.purple, false, { alignSelf: "flex-end", padding: "10px 22px", opacity: (isSending || !chatInput.trim()) ? 0.5 : 1 })}>
+              <button onClick={sendMessage} disabled={isSending} style={btn(C.purple, false, { alignSelf: "flex-end", padding: "10px 22px", opacity: isSending ? 0.5 : 1 })}>
                 {isSending ? "..." : "Send"}
               </button>
             </div>
