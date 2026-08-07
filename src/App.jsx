@@ -181,6 +181,8 @@ export default function App() {
   const [tasks, setTasks]               = useState([]);
   const [newTask, setNewTask]           = useState({ title: "", assignee: "manager", priority: "medium" });
   const chatEndRef = useRef(null);
+  const [attachedFile, setAttachedFile] = useState(null);
+  const fileInputRef = useRef(null);
   const month = 7; const year = 2026;
 
   // ── Persist settings ──────────────────────────────────────────────────────
@@ -293,20 +295,52 @@ export default function App() {
     return SKILL_TRIGGERS.some(k => l.includes(k));
   }
 
+  // ── File attachment handler ───────────────────────────────────────────────
+  function handleFileAttach(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const isImage = file.type.startsWith("image/");
+    const isPDF   = file.type === "application/pdf";
+    const reader  = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1];
+      setAttachedFile({ base64, mimeType: file.type, name: file.name, previewUrl: isImage ? reader.result : null, isImage, isPDF });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
   // ── Send chat message ─────────────────────────────────────────────────────
   async function sendMessage() {
     const text = chatInputRef.current?.value?.trim() || "";
-    if (!text || isSending) return;
+    if ((!text && !attachedFile) || isSending) return;
     const agentId = chatAgentId;
     if (chatInputRef.current) chatInputRef.current.value = "";
     setIsSending(true);
     setPendingPlan(null);
+    const fileSnap = attachedFile;
+    setAttachedFile(null);
 
-    const userMsg = { role: "user", content: text, agent_id: agentId, created_at: new Date().toISOString() };
+    // Build content — text only, or text + image/doc
+    let apiContent;
+    if (fileSnap) {
+      apiContent = [];
+      if (fileSnap.isImage) {
+        apiContent.push({ type: "image", source: { type: "base64", media_type: fileSnap.mimeType, data: fileSnap.base64 } });
+      } else {
+        apiContent.push({ type: "document", source: { type: "base64", media_type: fileSnap.mimeType || "application/pdf", data: fileSnap.base64 } });
+      }
+      if (text) apiContent.push({ type: "text", text });
+    } else {
+      apiContent = text;
+    }
+
+    const userMsg = { role: "user", content: apiContent, agent_id: agentId, created_at: new Date().toISOString(), attachmentPreview: fileSnap?.previewUrl, attachmentName: fileSnap?.name };
     setChatMessages(prev => ({ ...prev, [agentId]: [...(prev[agentId] || []), userMsg] }));
 
-    // Save user message to Supabase
-    try { await db.post("chat_messages", { agent_id: agentId, role: "user", content: text }); } catch (_) {}
+    // Save user message to Supabase (text only — no base64)
+    const storedText = text || (fileSnap ? `[Attached: ${fileSnap.name}]` : "");
+    try { await db.post("chat_messages", { agent_id: agentId, role: "user", content: storedText }); } catch (_) {}
 
     // Detect skill instruction keywords
     if (detectSkillKeywords(text)) setPendingSkill({ agentId, text });
@@ -327,6 +361,18 @@ export default function App() {
 
       // Save assistant message
       try { await db.post("chat_messages", { agent_id: agentId, role: "assistant", content: reply }); } catch (_) {}
+
+      // Auto-generate image when chatting with Post Designer
+      if (agentId === "designer" && geminiKey) {
+        const wantsImage = /generate|create.*image|make.*image|show me|design.*post|visuali/i.test(text);
+        if (wantsImage) {
+          try {
+            const imgUrl = await geminiImage(geminiKey, reply.slice(0, 800));
+            const imgMsg = { role: "assistant", content: "Here's the generated image:", agent_id: agentId, created_at: new Date().toISOString(), generatedImage: imgUrl };
+            setChatMessages(prev => ({ ...prev, [agentId]: [...(prev[agentId] || []), imgMsg] }));
+          } catch (e) { log("Post Designer", "Image gen in chat failed", e.message); }
+        }
+      }
 
       // Detect plan in response (JSON array with week+day structure)
       if (agentId === "manager" || agentId === "content" || agentId === "whole_team") {
@@ -1303,17 +1349,29 @@ ALTER TABLE staff_tasks     DISABLE ROW LEVEL SECURITY;`;
             )}
             {msgs.map((msg, i) => {
               const isUser = msg.role === "user";
+              const textContent = typeof msg.content === "string" ? msg.content : (msg.content?.find?.(c => c.type === "text")?.text || "");
               return (
-                <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
-                  <div style={{
-                    maxWidth: "72%", padding: "11px 16px",
-                    borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                    background: isUser ? C.purple : C.card,
-                    border: isUser ? "none" : `1px solid ${C.border}`,
-                    fontSize: 13, lineHeight: 1.65, color: C.text, whiteSpace: "pre-wrap"
-                  }}>
-                    {msg.content}
-                  </div>
+                <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", gap: 6 }}>
+                  {msg.attachmentPreview && (
+                    <img src={msg.attachmentPreview} alt="ref" style={{ maxWidth: 220, borderRadius: 10, border: `1px solid ${C.border}` }} />
+                  )}
+                  {msg.attachmentName && !msg.attachmentPreview && (
+                    <div style={{ fontSize: 12, color: C.muted, padding: "6px 12px", background: C.card, borderRadius: 8, border: `1px solid ${C.border}` }}>📄 {msg.attachmentName}</div>
+                  )}
+                  {msg.generatedImage && (
+                    <img src={msg.generatedImage} alt="Generated" style={{ maxWidth: 300, borderRadius: 12, border: `1px solid ${C.border}` }} />
+                  )}
+                  {textContent ? (
+                    <div style={{
+                      maxWidth: "72%", padding: "11px 16px",
+                      borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                      background: isUser ? C.purple : C.card,
+                      border: isUser ? "none" : `1px solid ${C.border}`,
+                      fontSize: 13, lineHeight: 1.65, color: C.text, whiteSpace: "pre-wrap"
+                    }}>
+                      {textContent}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -1348,7 +1406,18 @@ ALTER TABLE staff_tasks     DISABLE ROW LEVEL SECURITY;`;
 
           {/* Input */}
           <div style={{ padding: "14px 20px", borderTop: `1px solid ${C.border}`, background: C.surf, flexShrink: 0 }}>
-            <div style={{ display: "flex", gap: 10 }}>
+            <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.doc,.docx" onChange={handleFileAttach} style={{ display: "none" }} />
+            {attachedFile && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "8px 12px", background: `${C.purple}10`, border: `1px solid ${C.purple}30`, borderRadius: 8 }}>
+                {attachedFile.previewUrl
+                  ? <img src={attachedFile.previewUrl} style={{ height: 36, width: 36, objectFit: "cover", borderRadius: 4 }} />
+                  : <span style={{ fontSize: 18 }}>📄</span>}
+                <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{attachedFile.name}</span>
+                <button onClick={() => setAttachedFile(null)} style={{ background: "transparent", border: "none", color: C.danger, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => fileInputRef.current?.click()} title="Attach image, PDF or document" style={{ ...btnSm(C.muted), alignSelf: "flex-end", padding: "10px 13px", fontSize: 17, borderRadius: 8 }}>📎</button>
               <textarea
                 ref={chatInputRef}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
@@ -1360,7 +1429,7 @@ ALTER TABLE staff_tasks     DISABLE ROW LEVEL SECURITY;`;
                 {isSending ? "..." : "Send"}
               </button>
             </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Press Enter to send · Shift+Enter for new line</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Enter to send · Shift+Enter new line · 📎 attach image / PDF / doc</div>
           </div>
         </div>
       </div>
