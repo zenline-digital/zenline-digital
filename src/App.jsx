@@ -107,7 +107,7 @@ const CHAT_AGENTS = [
   { id: "whole_team", name: "Whole Team", emoji: "👥", color: C.muted,  desc: "Broadcast to all" },
   { id: "content",    name: "Content",    emoji: "🧠", color: C.teal,   desc: "Plans content topics" },
   { id: "promptWriter", name: "Prompt",   emoji: "✍️", color: C.amber,  desc: "Crafts image generation pr..." },
-  { id: "designer",   name: "Post",       emoji: "🎨", color: C.pink,   desc: "Generates visuals using Ge..." },
+  { id: "designer",   name: "Post Designer", emoji: "🎨", color: C.pink,   desc: "Generates visuals via Gemini" },
   { id: "copywriter", name: "Copywriter", emoji: "📝", color: C.blue,   desc: "Writes captions and hasht..." },
 ];
 
