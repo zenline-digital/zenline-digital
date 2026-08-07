@@ -71,12 +71,12 @@ async function claudeChat(system, history, maxTokens = 1500) {
 
 // ─── Gemini Image ─────────────────────────────────────────────────────────────
 async function geminiImage(apiKey, prompt) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`, {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
+      generationConfig: { responseModalities: ["image", "text"] }
     })
   });
   const d = await r.json();
