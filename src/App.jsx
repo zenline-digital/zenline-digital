@@ -71,7 +71,7 @@ async function claudeChat(system, history, maxTokens = 1500) {
 
 // ─── Gemini Image ─────────────────────────────────────────────────────────────
 async function geminiImage(apiKey, prompt) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "1:1" } })
@@ -199,7 +199,7 @@ export default function App() {
 
   // ── Auto-scroll chat ──────────────────────────────────────────────────────
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatEndRef.current?.scrollIntoView({ behavior: "instant" });
   }, [chatMessages, chatAgentId, isSending]);
 
   // ── Loaders ───────────────────────────────────────────────────────────────
