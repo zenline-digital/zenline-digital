@@ -369,7 +369,8 @@ export default function App() {
 
       // Image generation — Manager delegates to Post Designer, or Post Designer generates directly
       const wantsImage = /generate.*image|create.*image|make.*image|show.*image|design.*post|visuali|generate.*visual|create.*visual/i.test(text);
-      if (wantsImage && geminiKey) {
+      const activeGeminiKey = localStorage.getItem("zld_gemini") || geminiKey;
+      if (wantsImage && activeGeminiKey) {
         if (agentId === "manager") {
           // Manager delegates to Post Designer
           const delegateMsg = { role: "assistant", content: "Got it — briefing the Post Designer now...", agent_id: agentId, created_at: new Date().toISOString() };
@@ -382,7 +383,7 @@ export default function App() {
 Return ONLY the prompt text.`
             );
             // Step 2: Post Designer generates the image
-            const imgUrl = await geminiImage(geminiKey, imgPrompt);
+            const imgUrl = await geminiImage(activeGeminiKey, imgPrompt);
             const imgMsg = { role: "assistant", content: `✅ Post Designer delivered:
 
 _Prompt used: "${imgPrompt.slice(0, 120)}..."_`, agent_id: agentId, created_at: new Date().toISOString(), generatedImage: imgUrl };
@@ -395,7 +396,7 @@ _Prompt used: "${imgPrompt.slice(0, 120)}..."_`, agent_id: agentId, created_at: 
         } else if (agentId === "designer") {
           // Post Designer generates directly
           try {
-            const imgUrl = await geminiImage(geminiKey, reply.slice(0, 800));
+            const imgUrl = await geminiImage(activeGeminiKey, reply.slice(0, 800));
             const imgMsg = { role: "assistant", content: "Here's the generated image:", agent_id: agentId, created_at: new Date().toISOString(), generatedImage: imgUrl };
             setChatMessages(prev => ({ ...prev, [agentId]: [...(prev[agentId] || []), imgMsg] }));
           } catch (e) { log("Post Designer", "Image gen failed", e.message); }
