@@ -566,6 +566,12 @@ const ALL_TASK_DEFINITIONS = [
   { name:"Post to Google Business Profile", cat:"marketing", freq:"daily", priority:6,
     instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Google Business Profile → Option B tab → select a topic → click Generate Post → copy the text → go to business.google.com → Posts → Create post → paste text → add a product photo if available → click Post." },
 
+  // DAILY SOCIAL ENGAGEMENT TASKS
+  { name:"TikTok daily engagement", cat:"social", freq:"daily", priority:7,
+    instructions:"Open TikTok → search #dubaigym #uaefitness #dubaifit\n1. FOLLOW 5 new gym or fitness accounts (UAE trainers, gym-goers, athletes — not brands)\n2. VIEW 10 fitness videos fully — watch till end, do not skip\n3. COMMENT genuinely on 10 posts. Examples: This is exactly the energy, Form is perfect here, This is why gear matters. Never mention THUGFIT in comments.\n4. LIKE 20 fitness videos\nTarget accounts with 5K-200K followers only." },
+  { name:"Instagram daily engagement", cat:"social", freq:"daily", priority:8,
+    instructions:"Open Instagram → search #dubaigym #uaefitness #dubaiworkout\n1. FOLLOW 5 new fitness or gym accounts (UAE-based trainers, athletes, gym-goers)\n2. VIEW all Stories from accounts you follow — tap through fully\n3. COMMENT genuinely on 10 posts. Examples: The dedication here is real, This is the mindset, Form on point. Keep comments real, never generic.\n4. MESSAGE 1 fitness influencer a genuine compliment about their content — no pitching, just relationship building.\n5. LIKE 20 fitness posts\nTarget: people with 5K-100K followers. Avoid big celebrities." },
+
   // WEEKLY TASKS (Monday)
   { name:"Send Train & Earn outreach emails", cat:"marketing", freq:"weekly_mon", priority:10,
     instructions:"Open ZenLine Digital → Auto SEO → SEO Tasks → Backlink Outreach Emails → select target type (UAE Fitness Blog / Dubai Gym / Influencer) → click Generate 3 Emails → copy each email → find the target website or Instagram DM → send the email. Do this for at least 3 different targets every Monday." },
@@ -606,6 +612,29 @@ function StaffTaskManager({ platformUser }) {
   const [toast,      setToast]      = useState("");
   const [proofImages, setProofImages] = useState({});
   const [autoValidating, setAutoValidating] = useState(false);
+  const [customTasks, setCustomTasks] = useState(() => { try { return JSON.parse(localStorage.getItem("thugfit_custom_tasks")||"[]"); } catch { return []; } });
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskFreq, setNewTaskFreq] = useState("daily");
+  const [newTaskInstr, setNewTaskInstr] = useState("");
+
+  const saveCustomTask = () => {
+    if (!newTaskName.trim()) return;
+    const task = { id: Date.now(), name: newTaskName.trim(), cat: "custom", freq: newTaskFreq, priority: 99, instructions: newTaskInstr.trim() || "Complete this task as instructed by Midhun.", addedBy: "Midhun", addedAt: new Date().toLocaleDateString("en-GB") };
+    const updated = [...customTasks, task];
+    setCustomTasks(updated);
+    localStorage.setItem("thugfit_custom_tasks", JSON.stringify(updated));
+    setNewTaskName(""); setNewTaskFreq("daily"); setNewTaskInstr(""); setShowAddTask(false);
+    showToast("Task added for staff");
+  };
+
+  const deleteCustomTask = (id) => {
+    const updated = customTasks.filter(t => t.id !== id);
+    setCustomTasks(updated);
+    localStorage.setItem("thugfit_custom_tasks", JSON.stringify(updated));
+  };
+
+  const allTaskDefs = [...ALL_TASK_DEFINITIONS, ...customTasks];
 
   const today = new Date().toISOString().split("T")[0];
   const dow = new Date().getDay(); // 0=Sun,1=Mon,...5=Fri,6=Sat
@@ -618,7 +647,7 @@ function StaffTaskManager({ platformUser }) {
 
   // Determine which tasks apply today
   const getApplicableTasks = () => {
-    return ALL_TASK_DEFINITIONS.filter(t => {
+    return allTaskDefs.filter(t => {
       if (t.freq === "daily") return true;
       if (t.freq === "weekly_mon") return dow === 1;
       if (t.freq === "weekly_fri") return dow === 5;
@@ -768,7 +797,7 @@ function StaffTaskManager({ platformUser }) {
         <div style={{marginLeft:"auto", display:"flex", gap:8}}>
           <button onClick={()=>setView("today")} style={{...s.btn(view==="today"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📋 My Tasks</button>
           {staffIsAdmin && <button onClick={()=>setView("report")} style={{...s.btn(view==="report"?"#8B7CF8":"#131929"), padding:"7px 16px", fontSize:12}}>📊 Team Report</button>}
-
+          {staffIsAdmin && <button onClick={()=>setShowAddTask(v=>!v)} style={{...s.btn(showAddTask?"#16a34a":"#131929"), padding:"7px 16px", fontSize:12, border:"1px solid #16a34a40"}}>+ Add Task</button>}
         </div>
       </div>
 
@@ -807,6 +836,45 @@ function StaffTaskManager({ platformUser }) {
             💡 <strong>Run this once per month</strong> — on the 1st of every month, generate a new plan, approve the posts, then run the Algorithm Engine again to schedule the new batch.
           </div>
         </div>
+
+        {/* ADD CUSTOM TASK PANEL — admin only */}
+        {staffIsAdmin && showAddTask && (
+          <div style={{background:"#0D1117", border:"1px solid #16a34a40", borderRadius:14, padding:20, marginBottom:20}}>
+            <div style={{fontWeight:800, fontSize:14, color:"#4ade80", marginBottom:14}}>+ Add Custom Task for Staff</div>
+            <div style={{display:"flex", flexDirection:"column", gap:10}}>
+              <input value={newTaskName} onChange={e=>setNewTaskName(e.target.value)} placeholder="Task name e.g. Follow 10 UAE fitness accounts on TikTok"
+                style={{background:"#07091A", border:"1px solid #1C2537", borderRadius:8, padding:"9px 14px", color:"#E2E8F7", fontSize:13, fontFamily:"inherit", outline:"none"}}/>
+              <select value={newTaskFreq} onChange={e=>setNewTaskFreq(e.target.value)}
+                style={{background:"#07091A", border:"1px solid #1C2537", borderRadius:8, padding:"9px 14px", color:"#E2E8F7", fontSize:13, fontFamily:"inherit", outline:"none"}}>
+                <option value="daily">Daily</option>
+                <option value="weekly_mon">Every Monday</option>
+                <option value="weekly_fri">Every Friday</option>
+                <option value="monthly">Monthly (1st of month)</option>
+              </select>
+              <textarea value={newTaskInstr} onChange={e=>setNewTaskInstr(e.target.value)} rows={3}
+                placeholder="Step-by-step instructions for staff e.g. Open TikTok → search #dubaigym → follow 5 accounts → comment on 10 posts"
+                style={{background:"#07091A", border:"1px solid #1C2537", borderRadius:8, padding:"9px 14px", color:"#E2E8F7", fontSize:13, fontFamily:"inherit", outline:"none", resize:"vertical"}}/>
+              <div style={{display:"flex", gap:8}}>
+                <button onClick={saveCustomTask} style={{padding:"9px 20px", borderRadius:8, border:"none", background:"#16a34a", color:"#fff", fontSize:13, fontWeight:700, fontFamily:"inherit", cursor:"pointer"}}>Save Task</button>
+                <button onClick={()=>setShowAddTask(false)} style={{padding:"9px 16px", borderRadius:8, border:"1px solid #1C2537", background:"transparent", color:"#6B7EB8", fontSize:13, fontFamily:"inherit", cursor:"pointer"}}>Cancel</button>
+              </div>
+            </div>
+            {customTasks.length > 0 && (
+              <div style={{marginTop:16, borderTop:"1px solid #1C2537", paddingTop:14}}>
+                <div style={{fontSize:11, fontWeight:700, color:"#3a3a5c", marginBottom:8}}>YOUR CUSTOM TASKS</div>
+                {customTasks.map(t=>(
+                  <div key={t.id} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid #1C253730"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13, fontWeight:600, color:"#E2E8F7"}}>{t.name}</div>
+                      <div style={{fontSize:10, color:"#3a3a5c"}}>{t.freq==="daily"?"Daily":t.freq==="weekly_mon"?"Every Monday":t.freq==="weekly_fri"?"Every Friday":"Monthly"} · Added {t.addedAt}</div>
+                    </div>
+                    <button onClick={()=>deleteCustomTask(t.id)} style={{background:"none", border:"none", color:"#ef4444", cursor:"pointer", fontSize:13}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* TODAY'S TASKS */}
         {view==="today" && (
