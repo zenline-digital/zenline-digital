@@ -52,8 +52,10 @@ async function claude(system, user, maxTokens = 1200) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] })
   });
-  const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
+  let d;
+  try { d = await r.json(); } catch (_) { throw new Error("API connection error — please try again"); }
+  if (d.error) throw new Error(d.error.message || "API error");
+  if (!d.content?.[0]?.text) throw new Error("Empty API response — please try again");
   return d.content[0].text;
 }
 
@@ -64,8 +66,10 @@ async function claudeChat(system, history, maxTokens = 1500) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: history })
   });
-  const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
+  let d;
+  try { d = await r.json(); } catch (_) { throw new Error("API connection error — please try again"); }
+  if (d.error) throw new Error(d.error.message || "API error");
+  if (!d.content?.[0]?.text) throw new Error("Empty API response — please try again");
   return d.content[0].text;
 }
 
@@ -434,8 +438,11 @@ export default function App() {
         ? `\n\nSTANDING TEAM INSTRUCTIONS (must follow in this plan):\n${relevantSkills.map(s => `• ${s.skill}`).join("\n")}`
         : "";
 
-      const briefCtx = briefSummary
-        ? "\n\nMONTHLY BRIEF FROM MIDHUN (follow this closely — build the plan around these requirements):\n" + briefSummary.slice(0, 800)
+      const cleanBrief = briefSummary
+        .replace(/#{1,6}\s*/g, "").replace(/\*\*/g, "").replace(/\*/g, "")
+        .replace(/---/g, "").replace(/\n{3,}/g, "\n").trim().slice(0, 500);
+      const briefCtx = cleanBrief
+        ? "\n\nMONTHLY BRIEF FROM MIDHUN (build the plan around these requirements):\n" + cleanBrief
         : "";
       if (briefSummary) log("Social Media Manager", "Monthly brief loaded", "Applying your discussion context to this plan...");
 
