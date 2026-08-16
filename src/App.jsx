@@ -191,6 +191,10 @@ export default function App() {
   const [tasks, setTasks]               = useState([]);
   const [newTask, setNewTask]           = useState({ title: "", assignee: "manager", priority: "medium" });
   const [allPlans, setAllPlans]         = useState([]);
+  const [editingPostId, setEditingPostId] = useState(null);
+  const editCaptionRef  = useRef(null);
+  const editHashtagsRef = useRef(null);
+  const editDateRef     = useRef(null);
   const chatEndRef = useRef(null);
   const now = new Date(); const month = now.getMonth() + 1; const year = now.getFullYear();
 
@@ -483,6 +487,29 @@ export default function App() {
     setChatMessages(prev => ({ ...prev, "monthly_brief": [] }));
     setLoadedAgents(prev => { const s = new Set(prev); s.delete("monthly_brief"); return s; });
     try { await db.del("chat_messages", "agent_id=eq.monthly_brief"); } catch (_) {}
+  }
+
+  // ── Delete post ─────────────────────────────────────────────────────────
+  async function deletePost(post) {
+    if (post.id) try { await db.del("posts", `id=eq.${post.id}`); } catch(_) {}
+    setPending(p => p.filter(x => x.id !== post.id && x !== post));
+    setPosts(p => p.filter(x => x.id !== post.id && x !== post));
+    if (editingPostId === post.id) setEditingPostId(null);
+    notify("Post deleted");
+  }
+
+  // ── Save post edit ───────────────────────────────────────────────────────
+  async function savePostEdit(post) {
+    const caption     = editCaptionRef.current?.value?.trim()  || post.caption;
+    const hashtags    = editHashtagsRef.current?.value?.trim() || post.hashtags;
+    const rawDate     = editDateRef.current?.value;
+    const scheduledAt = rawDate ? new Date(rawDate).toISOString() : post.scheduled_at;
+    const updates = { caption, hashtags, scheduled_at: scheduledAt };
+    if (post.id) try { await db.patch("posts", updates, `id=eq.${post.id}`); } catch(_) {}
+    const applyUpdate = arr => arr.map(x => (x.id === post.id || x === post) ? { ...x, ...updates } : x);
+    setPending(applyUpdate); setPosts(applyUpdate);
+    setEditingPostId(null);
+    notify("Post updated");
   }
 
   // ── Generate Monthly Plan ─────────────────────────────────────────────────
@@ -1186,25 +1213,65 @@ Return JSON only:
   function Queue() {
     const statusColor = { pending_approval: C.amber, approved: C.teal, scheduled: C.purple, published: C.blue, rejected: C.danger };
     const all = [...pending.map(p => ({ ...p, _s: "pending_approval" })), ...posts.map(p => ({ ...p, _s: p.status }))];
+
     return (
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Content Queue</div>
         {all.length === 0
           ? <div style={{ ...card, textAlign: "center", padding: "64px 20px", color: C.muted }}>No content yet. Open the Planner and click ⚡ Generate on any post.</div>
           : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {all.map((post, i) => (
-              <div key={i} onClick={() => { if (post._s === "pending_approval") { setSelectedPost(post); setPage("approval"); } }}
-                style={{ ...card, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, cursor: post._s === "pending_approval" ? "pointer" : "default" }}>
-                <div style={{ width: 44, height: 44, borderRadius: 8, background: C.border, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                  {post.image_url ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🖼"}
+            {all.map((post, i) => {
+              const isEditing = editingPostId === (post.id || i);
+              const schedDate = post.scheduled_at ? new Date(post.scheduled_at).toISOString().slice(0,16) : "";
+              return (
+                <div key={post.id || i} style={{ ...card, padding: "12px 16px" }}>
+                  {/* Row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 8, background: C.border, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                      {post.image_url ? <img src={post.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🖼"}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, cursor: post._s === "pending_approval" ? "pointer" : "default" }}
+                      onClick={() => { if (post._s === "pending_approval") { setSelectedPost(post); setPage("approval"); } }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{post.topic}</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                        Week {post.week_number} · {post.day_of_week} · {post.content_type?.replace("_"," ")}
+                        {post.scheduled_at && <span style={{ marginLeft: 6 }}>· {new Date(post.scheduled_at).toLocaleDateString("en-AE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}
+                      </div>
+                    </div>
+                    <span style={badge(statusColor[post._s] || C.muted)}>{post._s?.replace(/_/g," ")}</span>
+                    <button onClick={() => setEditingPostId(isEditing ? null : (post.id || i))}
+                      style={{ ...btnSm(isEditing ? C.purple : C.muted), marginLeft: 4 }} title="Edit">✏️</button>
+                    <button onClick={() => { if (window.confirm("Delete this post?")) deletePost(post); }}
+                      style={{ ...btnSm(C.danger), padding: "4px 8px" }} title="Delete">✕</button>
+                  </div>
+
+                  {/* Edit panel */}
+                  {isEditing && (
+                    <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10, paddingTop: 14, borderTop: "1px solid " + C.border }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 5 }}>Caption</div>
+                        <textarea ref={editCaptionRef} defaultValue={post.caption || ""} rows={4}
+                          style={{ ...inp, width: "100%", resize: "vertical", lineHeight: 1.6, fontSize: 12 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 5 }}>Hashtags</div>
+                        <textarea ref={editHashtagsRef} defaultValue={post.hashtags || ""} rows={2}
+                          style={{ ...inp, width: "100%", resize: "none", fontSize: 12, color: C.purple }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 5 }}>Scheduled date & time</div>
+                        <input ref={editDateRef} type="datetime-local" defaultValue={schedDate}
+                          style={{ ...inp, colorScheme: "dark", fontSize: 12 }} />
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => savePostEdit(post)} style={btn(C.teal, false, { fontSize: 12, padding: "7px 16px" })}>Save changes</button>
+                        <button onClick={() => setEditingPostId(null)} style={btnSm(C.muted)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{post.topic}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Week {post.week_number} · {post.day_of_week} · {post.content_type?.replace("_"," ")}</div>
-                </div>
-                <span style={badge(statusColor[post._s] || C.muted)}>{post._s?.replace(/_/g," ")}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>}
       </div>
     );
@@ -1213,23 +1280,63 @@ Return JSON only:
   // ── Page: Calendar ─────────────────────────────────────────────────────────
   function Calendar() {
     const dowLabels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-    const dim = new Date(year, month, 0).getDate();
-    const firstDow = new Date(year, month - 1, 1).getDay();
-    const offset = firstDow === 0 ? 6 : firstDow - 1;
-    const today = new Date().getDate();
+    const dim       = new Date(year, month, 0).getDate();
+    const firstDow  = new Date(year, month - 1, 1).getDay();
+    const offset    = firstDow === 0 ? 6 : firstDow - 1;
+    const today     = new Date().getDate();
     const currMonth = new Date().getMonth() + 1;
+    const allPosts  = [...pending.map(p => ({ ...p, _s: "pending_approval" })), ...posts.map(p => ({ ...p, _s: p.status }))];
+
+    // All posts scheduled for this month
+    const scheduledPosts = allPosts.filter(p => {
+      if (!p.scheduled_at) return false;
+      const d = new Date(p.scheduled_at);
+      return d.getMonth() + 1 === month && d.getFullYear() === year;
+    });
+
+    function postsOnDay(d) {
+      return scheduledPosts.filter(p => new Date(p.scheduled_at).getDate() === d);
+    }
+
+    const statusColor = { pending_approval: C.amber, approved: C.teal, scheduled: C.purple, published: C.blue, rejected: C.danger };
+
     return (
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Calendar</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>{MONTHS[month-1]} {year} — posts appear here once scheduled</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: C.muted }}>{MONTHS[month-1]} {year} — {scheduledPosts.length} scheduled post{scheduledPosts.length !== 1 ? "s" : ""}</div>
+          {scheduledPosts.length === 0 && <div style={{ fontSize: 11, color: C.amber }}>Run Algorithm Engine to schedule posts</div>}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, background: C.border, borderRadius: 12, overflow: "hidden" }}>
-          {dowLabels.map(d => <div key={d} style={{ background: C.card, padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{d}</div>)}
-          {Array(offset).fill(0).map((_, i) => <div key={`e${i}`} style={{ background: "#080B12", minHeight: 72 }} />)}
+          {dowLabels.map(d => (
+            <div key={d} style={{ background: C.card, padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{d}</div>
+          ))}
+          {Array(offset).fill(0).map((_, i) => <div key={`e${i}`} style={{ background: "#080B12", minHeight: 90 }} />)}
           {Array(dim).fill(0).map((_, i) => {
-            const d = i + 1; const isToday = d === today && month === currMonth;
+            const d = i + 1;
+            const isToday = d === today && month === currMonth;
+            const dayPosts = postsOnDay(d);
             return (
-              <div key={d} style={{ background: C.card, minHeight: 72, padding: "7px 8px", borderTop: isToday ? `2px solid ${C.purple}` : "2px solid transparent" }}>
-                <div style={{ fontSize: 12, color: isToday ? C.purple : C.muted, fontWeight: isToday ? 700 : 400 }}>{d}</div>
+              <div key={d} style={{ background: C.card, minHeight: 90, padding: "6px 7px", borderTop: isToday ? `2px solid ${C.purple}` : "2px solid transparent" }}>
+                <div style={{ fontSize: 12, color: isToday ? C.purple : C.muted, fontWeight: isToday ? 700 : 400, marginBottom: dayPosts.length ? 5 : 0 }}>{d}</div>
+                {dayPosts.map((p, pi) => (
+                  <div key={pi} style={{ marginBottom: 3 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 3, background: (TYPE_COLORS[p.content_type] || C.purple) + "18", borderRadius: 5, padding: "3px 5px" }}>
+                      <div
+                        onClick={() => { setSelectedPost(p); setPage("approval"); }}
+                        style={{ flex: 1, fontSize: 9, lineHeight: 1.4, color: TYPE_COLORS[p.content_type] || C.purple, cursor: "pointer", overflow: "hidden" }}
+                      >
+                        <div style={{ fontWeight: 700, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{p.topic?.slice(0, 22)}</div>
+                        <div style={{ opacity: 0.75 }}>{new Date(p.scheduled_at).toLocaleTimeString("en-AE", { hour: "2-digit", minute: "2-digit" })}</div>
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); if (window.confirm("Delete this post?")) deletePost(p); }}
+                        style={{ background: "transparent", border: "none", color: C.danger, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "1px 2px", flexShrink: 0, opacity: 0.7 }}
+                        title="Delete"
+                      >✕</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             );
           })}
