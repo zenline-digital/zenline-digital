@@ -75,13 +75,18 @@ async function claudeChat(system, history, maxTokens = 1500) {
 
 // ─── Gemini Image ─────────────────────────────────────────────────────────────
 async function geminiImage(apiKey, prompt) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "1:1" } })
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+    })
   });
   const d = await r.json();
-  if (d.predictions?.[0]?.bytesBase64Encoded) return `data:image/png;base64,${d.predictions[0].bytesBase64Encoded}`;
+  const parts = d.candidates?.[0]?.content?.parts || [];
+  const img = parts.find(p => p.inlineData);
+  if (img?.inlineData?.data) return `data:${img.inlineData.mimeType || "image/png"};base64,${img.inlineData.data}`;
   throw new Error(d.error?.message || "No image returned from Gemini");
 }
 
@@ -186,7 +191,7 @@ export default function App() {
   const [tasks, setTasks]               = useState([]);
   const [newTask, setNewTask]           = useState({ title: "", assignee: "manager", priority: "medium" });
   const chatEndRef = useRef(null);
-  const month = 7; const year = 2026;
+  const now = new Date(); const month = now.getMonth() + 1; const year = now.getFullYear();
 
   // ── Monthly Brief state ───────────────────────────────────────────────────
   const briefInputRef = useRef(null);
@@ -306,6 +311,11 @@ export default function App() {
     return SKILL_TRIGGERS.some(k => l.includes(k));
   }
 
+  function detectExplicitSkillSave(text) {
+    const l = text.toLowerCase();
+    return ["add as skill","save as skill","add this as skill","save this as skill","add to skills","save to skills","add this rule","save this rule","remember this always","always remember this"].some(k => l.includes(k));
+  }
+
   // ── Send chat message ─────────────────────────────────────────────────────
   async function sendMessage() {
     const text = chatInputRef.current?.value?.trim() || "";
@@ -320,7 +330,12 @@ export default function App() {
 
     try { await db.post("chat_messages", { agent_id: agentId, role: "user", content: text }); } catch (_) {}
 
-    if (detectSkillKeywords(text)) setPendingSkill({ agentId, text });
+    if (detectExplicitSkillSave(text)) {
+      // Auto-save immediately — no banner needed
+      addSkill(agentId, text);
+    } else if (detectSkillKeywords(text)) {
+      setPendingSkill({ agentId, text });
+    }
 
     const history = [...(chatMessages[agentId] || []), userMsg].slice(-30).map(m => ({ role: m.role, content: m.content }));
     const agentSkills = allSkills.filter(s => s.agent_id === agentId || s.agent_id === "whole_team");
@@ -394,6 +409,8 @@ export default function App() {
       try { await db.post("chat_messages", { agent_id: "monthly_brief", role: "assistant", content: reply }); } catch (_) {}
     } catch (e) { notify("Failed: " + e.message, "err"); }
     finally { setBriefLoading(false); }
+    // Auto-save if user explicitly requested a skill save
+    if (detectExplicitSkillSave(text)) addSkill("manager", text);
   }
 
   // ── Create Brief Summary ──────────────────────────────────────────────────
@@ -405,7 +422,7 @@ export default function App() {
       const transcript = msgs.map(m => (m.role === "user" ? "Midhun: " : "Manager: ") + m.content).join("\n\n");
       const summary = await claude(
         "You are a content strategist. Extract a clear structured monthly content brief from a planning discussion.",
-        "Based on this discussion between Midhun (THUGFIT owner) and his Social Media Manager, write a concise monthly content brief.\n\nDiscussion:\n" + transcript + "\n\nCover:\n- Key focus areas for this month\n- Specific campaigns or product launches\n- Content tone and themes\n- Special requirements or rules\n- Target audience focus\n\nBe specific and actionable. Under 300 words.",
+        "Based on this discussion between Midhun (THUGFIT owner) and his Social Media Manager, write a concise monthly content brief.\n\nDiscussion:\n" + transcript + "\n\nCover: key focus areas, campaigns or product launches, content tone and themes, special requirements, target audience. Be specific and actionable. Under 200 words. IMPORTANT: plain text only — no markdown, no headers, no bullet points, no bold, no dashes.",
         1200
       );
       setBriefSummary(summary);
@@ -446,35 +463,33 @@ export default function App() {
         : "";
       if (briefSummary) log("Social Media Manager", "Monthly brief loaded", "Applying your discussion context to this plan...");
 
-      const text = await claude(
-        `You are the Social Media Manager for THUGFIT, UAE premium gym activewear. Brand voice: ${brandVoice}${skillsCtx}${briefCtx}`,
-        `Create a 4-week Instagram content plan for ${MONTHS[month - 1]} ${year}.
-
-Content pillars: motivation (30%), training_tips (25%), lifestyle (20%), community (15%), product (10% — max 1 per week).
-
-Rules:
-- Exactly 5 posts per week Mon–Fri, 20 total
-- Mix of formats: single, carousel, reel_script
-- Topics must be specific and compelling
-- UAE/Dubai fitness culture context where relevant
-
-Return ONLY a valid JSON array of exactly 20 objects, no markdown:
-[{"week":1,"day":"Monday","content_type":"motivation","topic":"specific title","theme":"visual direction","format":"single"}]
-
-format values: single | carousel | reel_script
-content_type values: motivation | training_tips | lifestyle | community | product`,
-        2200
-      );
+      // Generate week-by-week (5 posts each) to stay within Vercel 10s serverless limit
+      const systemPrompt = `You are the Social Media Manager for THUGFIT, UAE premium gym activewear. Brand voice: ${brandVoice}${skillsCtx}${briefCtx}`;
+      const allPosts = [];
+      for (let w = 1; w <= 4; w++) {
+        setActiveAgent("content");
+        log("Content Strategist", `Planning Week ${w}`, `${MONTHS[month - 1]} ${year}`);
+        const weekText = await claude(
+          systemPrompt,
+          `Create exactly 5 Instagram posts for Week ${w} of ${MONTHS[month - 1]} ${year} (Monday to Friday).
+Pillars: motivation, training_tips, lifestyle, community, product (max 1 product per month total).
+UAE/Dubai fitness context. Specific compelling topics.
+Return ONLY a JSON array of 5 objects, no markdown:
+[{"week":${w},"day":"Monday","content_type":"motivation","topic":"specific title","theme":"visual direction","format":"single"}]
+format: single | carousel | reel_script
+content_type: motivation | training_tips | lifestyle | community | product`,
+          650
+        );
+        try { const wd = parseJSON(weekText); if (Array.isArray(wd)) allPosts.push(...wd); } catch (_) {}
+        await delay(200);
+      }
 
       setActiveAgent("manager");
       log("Social Media Manager", "Reviewing plan quality", "Cross-checking brand alignment...");
-      await delay(400);
+      await delay(300);
 
-      if (!text || text.toLowerCase().startsWith("an error") || (!text.includes("[") && !text.includes("{"))) {
-        throw new Error("Plan generation failed — try again. If the issue persists, shorten your Monthly Brief.");
-      }
-      const data = parseJSON(text);
-      if (!Array.isArray(data)) throw new Error("Plan format invalid — try again");
+      const data = allPosts;
+      if (!data.length) throw new Error("Plan generation failed — please try again");
 
       let saved;
       try { saved = await db.post("monthly_plans", { month, year, status: "draft", plan_data: data }); }
