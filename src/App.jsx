@@ -435,7 +435,7 @@ export default function App() {
         : "";
 
       const briefCtx = briefSummary
-        ? "\n\nMONTHLY BRIEF FROM MIDHUN (follow this closely — build the plan around these requirements):\n" + briefSummary
+        ? "\n\nMONTHLY BRIEF FROM MIDHUN (follow this closely — build the plan around these requirements):\n" + briefSummary.slice(0, 800)
         : "";
       if (briefSummary) log("Social Media Manager", "Monthly brief loaded", "Applying your discussion context to this plan...");
 
@@ -463,6 +463,9 @@ content_type values: motivation | training_tips | lifestyle | community | produc
       log("Social Media Manager", "Reviewing plan quality", "Cross-checking brand alignment...");
       await delay(400);
 
+      if (!text || text.toLowerCase().startsWith("an error") || (!text.includes("[") && !text.includes("{"))) {
+        throw new Error("Plan generation failed — try again. If the issue persists, shorten your Monthly Brief.");
+      }
       const data = parseJSON(text);
       if (!Array.isArray(data)) throw new Error("Plan format invalid — try again");
 
