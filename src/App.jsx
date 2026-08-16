@@ -194,7 +194,9 @@ export default function App() {
   const now = new Date(); const month = now.getMonth() + 1; const year = now.getFullYear();
 
   // ── Monthly Brief state ───────────────────────────────────────────────────
-  const briefInputRef = useRef(null);
+  const briefInputRef   = useRef(null);
+  const briefFileRef    = useRef(null);
+  const [briefAttachment, setBriefAttachment] = useState(null);
   const [briefLoading, setBriefLoading]         = useState(false);
   const [briefSummarizing, setBriefSummarizing] = useState(false);
   const [briefSummary, setBriefSummary]         = useState(() => localStorage.getItem("zld_brief_summary") || "");
@@ -391,15 +393,42 @@ export default function App() {
   }
 
   // ── Send Brief Message ────────────────────────────────────────────────────
+  function handleBriefFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const result = ev.target.result;
+      setBriefAttachment({ data: result.split(",")[1], mimeType: file.type || "image/jpeg", preview: result, name: file.name });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
   async function sendBriefMessage() {
     const text = briefInputRef.current?.value?.trim() || "";
-    if (!text || briefLoading) return;
+    if ((!text && !briefAttachment) || briefLoading) return;
     if (briefInputRef.current) briefInputRef.current.value = "";
+    const attachment = briefAttachment;
+    setBriefAttachment(null);
     setBriefLoading(true);
-    const userMsg = { role: "user", content: text, agent_id: "monthly_brief", created_at: new Date().toISOString() };
+
+    const displayContent = text + (attachment ? " [image attached]" : "");
+    const userMsg = { role: "user", content: displayContent, agent_id: "monthly_brief", created_at: new Date().toISOString() };
     setChatMessages(prev => ({ ...prev, "monthly_brief": [...(prev["monthly_brief"] || []), userMsg] }));
-    try { await db.post("chat_messages", { agent_id: "monthly_brief", role: "user", content: text }); } catch (_) {}
+    try { await db.post("chat_messages", { agent_id: "monthly_brief", role: "user", content: displayContent }); } catch (_) {}
+
     const history = [...(chatMessages["monthly_brief"] || []), userMsg].slice(-20).map(m => ({ role: m.role, content: m.content }));
+    if (attachment) {
+      history[history.length - 1] = {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: attachment.mimeType, data: attachment.data } },
+          { type: "text", text: text || "Please look at this image and give feedback for our content strategy." }
+        ]
+      };
+    }
+
     const agentSkills = allSkills.filter(s => s.agent_id === "manager" || s.agent_id === "whole_team");
     const systemPrompt = SYSTEM_PROMPTS.manager(agentSkills, brandVoice);
     try {
@@ -409,8 +438,7 @@ export default function App() {
       try { await db.post("chat_messages", { agent_id: "monthly_brief", role: "assistant", content: reply }); } catch (_) {}
     } catch (e) { notify("Failed: " + e.message, "err"); }
     finally { setBriefLoading(false); }
-    // Auto-save if user explicitly requested a skill save
-    if (detectExplicitSkillSave(text)) addSkill("manager", text);
+    if (text && detectExplicitSkillSave(text)) addSkill("manager", text);
   }
 
   // ── Create Brief Summary ──────────────────────────────────────────────────
@@ -723,7 +751,19 @@ Return JSON only: {"caption":"full caption with emojis and CTA","hashtags":"#tag
             )}
           </div>
 
+          {briefAttachment && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "8px 10px", background: C.surf, borderRadius: 8, border: "1px solid " + C.border }}>
+              <img src={briefAttachment.preview} alt="attachment" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }} />
+              <div style={{ flex: 1, fontSize: 11, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{briefAttachment.name}</div>
+              <button onClick={() => setBriefAttachment(null)} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>x</button>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input ref={briefFileRef} type="file" accept="image/*" onChange={handleBriefFile} style={{ display: "none" }} />
+            <button onClick={() => briefFileRef.current?.click()} title="Attach image"
+              style={{ ...btn(C.muted, true, { alignSelf: "flex-end", padding: "8px 11px", fontSize: 15 }) }}>
+              {"📎"}
+            </button>
             <textarea
               ref={briefInputRef}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendBriefMessage(); } }}
