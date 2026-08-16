@@ -1,17 +1,14 @@
 import https from 'https';
-
+export const config = { maxDuration: 60 };
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: { message: 'Method not allowed' } });
-
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const postData = JSON.stringify(body);
-
     const data = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.anthropic.com',
@@ -36,7 +33,6 @@ export default async function handler(req, res) {
       r.write(postData);
       r.end();
     });
-
     return res.status(data.status).json(data.body);
   } catch (error) {
     console.error('Claude proxy error:', error.message);
