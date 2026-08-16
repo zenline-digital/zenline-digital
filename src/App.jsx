@@ -190,6 +190,7 @@ export default function App() {
   const [pendingPlan, setPendingPlan]   = useState(null);
   const [tasks, setTasks]               = useState([]);
   const [newTask, setNewTask]           = useState({ title: "", assignee: "manager", priority: "medium" });
+  const [allPlans, setAllPlans]         = useState([]);
   const chatEndRef = useRef(null);
   const now = new Date(); const month = now.getMonth() + 1; const year = now.getFullYear();
 
@@ -209,7 +210,7 @@ export default function App() {
   // ── Boot: load global data ─────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
-      await Promise.allSettled([loadSkills(), loadChangeLog(), loadLatestPlan(), loadTasks()]);
+      await Promise.allSettled([loadSkills(), loadChangeLog(), loadLatestPlan(), loadTasks(), loadPosts(), loadAllPlans()]);
       await loadChatHistory("manager");
       await loadChatHistory("monthly_brief");
     })();
@@ -249,6 +250,23 @@ export default function App() {
     try {
       const d = await db.get("staff_tasks", "order=created_at.desc");
       setTasks(Array.isArray(d) ? d : []);
+    } catch (_) {}
+  }
+
+  async function loadPosts() {
+    try {
+      const d = await db.get("posts", "order=created_at.desc&limit=200");
+      if (Array.isArray(d)) {
+        setPending(d.filter(p => p.status === "pending_approval"));
+        setPosts(d.filter(p => p.status !== "pending_approval"));
+      }
+    } catch (_) {}
+  }
+
+  async function loadAllPlans() {
+    try {
+      const d = await db.get("monthly_plans", "order=created_at.desc&limit=20");
+      setAllPlans(Array.isArray(d) ? d : []);
     } catch (_) {}
   }
 
@@ -531,7 +549,9 @@ content_type: motivation | training_tips | lifestyle | community | product`,
       try { saved = await db.post("monthly_plans", { month, year, status: "draft", plan_data: data }); }
       catch (e) { log("System", "DB note", "Run SQL in Settings to enable saving"); }
 
-      setPlan({ id: saved?.id, month, year, data });
+      const newPlan = { id: saved?.id, month, year, data };
+      setPlan(newPlan);
+      setAllPlans(prev => [{ id: saved?.id, month, year, plan_data: data, created_at: new Date().toISOString() }, ...prev.filter(p => p.id !== saved?.id)].slice(0, 20));
       await addChangeLog("manager", `Monthly plan generated — ${data.length} posts for ${MONTHS[month - 1]} ${year}`, "plan");
       log("Social Media Manager", "Plan approved", `${data.length} posts planned for ${MONTHS[month - 1]}`);
       notify(`Monthly plan ready — ${data.length} posts across 4 weeks`);
@@ -968,7 +988,21 @@ Return JSON only:
   // ── Page: Planner ──────────────────────────────────────────────────────────
   function Planner() {
     const weekPosts = plan?.data?.filter(p => p.week === plannerWeek) || [];
-    if (!plan) return (
+    const allWeeks  = [...new Set((plan?.data || []).map(p => p.week))].sort();
+
+    function selectPlan(planRow) {
+      setPlan({ id: planRow.id, month: planRow.month, year: planRow.year, data: planRow.plan_data });
+    }
+
+    // Find a generated post matching a plan slot
+    function getGeneratedPost(p) {
+      return [...pending, ...posts].find(gp =>
+        gp.week_number === p.week && gp.day_of_week === p.day &&
+        (gp.plan_id === plan?.id || !gp.plan_id)
+      );
+    }
+
+    if (!plan && allPlans.length === 0) return (
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div><div style={{ fontSize: 18, fontWeight: 700 }}>Monthly Planner</div><div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>No plan yet</div></div>
@@ -977,46 +1011,106 @@ Return JSON only:
         <div style={{ ...card, textAlign: "center", padding: "64px 20px" }}>
           <div style={{ fontSize: 40, marginBottom: 14 }}>◫</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No monthly plan yet</div>
-          <div style={{ fontSize: 13, color: C.muted, marginBottom: 20, lineHeight: 1.6 }}>Generate a plan here, or discuss it with the Manager in Team Chat<br />and push it directly — your chat context will be used.</div>
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 20, lineHeight: 1.6 }}>Generate a plan here, or discuss with the Manager in Monthly Brief first.</div>
           <button onClick={genPlan} disabled={isWorking} style={btn(C.purple)}>{isWorking ? "⏳ Generating..." : "Generate Monthly Plan"}</button>
         </div>
       </div>
     );
+
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>Monthly Planner</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{MONTHS[plan.month - 1]} {plan.year} — {plan.data?.length || 0} posts planned</div>
-          </div>
-          <button onClick={genPlan} disabled={isWorking} style={btn(C.purple)}>{isWorking ? "⏳ Generating..." : "↺ Regenerate Plan"}</button>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-          {[1,2,3,4].map(w => (
-            <button key={w} onClick={() => setPlannerWeek(w)} style={{ padding: "7px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", background: plannerWeek === w ? C.purple : C.card, color: plannerWeek === w ? "#fff" : C.muted }}>Week {w}</button>
-          ))}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10 }}>
-          {DAYS.map(day => {
-            const p = weekPosts.find(x => x.day === day);
-            return (
-              <div key={day}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>{day.slice(0,3)}</div>
-                {p ? (
-                  <div style={{ ...card, padding: 12 }}>
-                    <span style={badge(TYPE_COLORS[p.content_type] || C.purple)}>{p.content_type?.replace("_"," ")}</span>
-                    <div style={{ fontSize: 12, fontWeight: 600, margin: "8px 0 6px", lineHeight: 1.45 }}>{p.topic}</div>
-                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginBottom: 8 }}>{(p.theme||"").slice(0,75)}{(p.theme||"").length > 75 ? "..." : ""}</div>
-                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>📐 {p.format}</div>
-                    <button onClick={() => genContent(p)} disabled={isWorking} style={btnSm(C.purple)}>{isWorking ? "..." : "⚡ Generate"}</button>
+        {/* ── Saved Plans history ── */}
+        {allPlans.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Saved Plans</div>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+              {allPlans.map((p, i) => {
+                const isActive = plan?.id === p.id;
+                return (
+                  <div key={p.id || i} onClick={() => selectPlan(p)} style={{
+                    flexShrink: 0, padding: "12px 16px", borderRadius: 10, cursor: "pointer",
+                    background: isActive ? C.purple + "18" : C.card,
+                    border: "1px solid " + (isActive ? C.purple + "50" : C.border),
+                    minWidth: 140, transition: "all 0.15s"
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isActive ? C.purple : C.text }}>
+                      {MONTHS[(p.month || 1) - 1]} {p.year}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                      {p.plan_data?.length || 0} posts
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      {p.created_at ? new Date(p.created_at).toLocaleDateString("en-AE", { day: "numeric", month: "short" }) : ""}
+                    </div>
+                    {isActive && <div style={{ fontSize: 10, color: C.purple, fontWeight: 600, marginTop: 4 }}>● Active</div>}
                   </div>
-                ) : (
-                  <div style={{ ...card, padding: 12, color: C.muted, fontSize: 13, textAlign: "center", minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>—</div>
-                )}
+                );
+              })}
+              <div onClick={genPlan} style={{
+                flexShrink: 0, padding: "12px 16px", borderRadius: 10, cursor: isWorking ? "not-allowed" : "pointer",
+                background: "transparent", border: "1px dashed " + C.border, minWidth: 120,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, color: C.muted, opacity: isWorking ? 0.5 : 1
+              }}>
+                {isWorking ? "⏳ Generating..." : "+ New Plan"}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          </div>
+        )}
+
+        {plan && (<>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Monthly Planner</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{MONTHS[plan.month - 1]} {plan.year} — {plan.data?.length || 0} posts</div>
+            </div>
+            <button onClick={genPlan} disabled={isWorking} style={btn(C.purple, true, { fontSize: 12 })}>{isWorking ? "⏳ Generating..." : "↺ New Plan"}</button>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+            {allWeeks.map(w => (
+              <button key={w} onClick={() => setPlannerWeek(w)} style={{ padding: "7px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", background: plannerWeek === w ? C.purple : C.card, color: plannerWeek === w ? "#fff" : C.muted }}>Week {w}</button>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10 }}>
+            {DAYS.map(day => {
+              const p = weekPosts.find(x => x.day === day);
+              const gen = p ? getGeneratedPost(p) : null;
+              return (
+                <div key={day}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>{day.slice(0,3)}</div>
+                  {p ? (
+                    <div style={{ ...card, padding: 12 }}>
+                      {gen?.image_url && (
+                        <img src={gen.image_url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, marginBottom: 8 }} />
+                      )}
+                      <span style={badge(TYPE_COLORS[p.content_type] || C.purple)}>{p.content_type?.replace("_"," ")}</span>
+                      <div style={{ fontSize: 12, fontWeight: 600, margin: "8px 0 4px", lineHeight: 1.4 }}>{p.topic}</div>
+                      {!gen && <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4, marginBottom: 8 }}>{(p.theme||"").slice(0,60)}{(p.theme||"").length > 60 ? "..." : ""}</div>}
+                      {gen && gen.caption && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.4, marginBottom: 8 }}>{gen.caption.slice(0,70)}...</div>}
+                      <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>📐 {p.format}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {gen ? (
+                          <>
+                            <button onClick={() => { setSelectedPost(gen); setPage("approval"); }} style={btnSm(C.teal)}>
+                              {gen.status === "pending_approval" ? "✓ Review" : "👁 View"}
+                            </button>
+                            <button onClick={() => genContent(p)} disabled={isWorking} style={btnSm(C.muted)}>↺</button>
+                          </>
+                        ) : (
+                          <button onClick={() => genContent(p)} disabled={isWorking} style={btnSm(C.purple)}>{isWorking ? "..." : "⚡ Generate"}</button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ ...card, padding: 12, color: C.muted, fontSize: 13, textAlign: "center", minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>—</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>)}
       </div>
     );
   }
