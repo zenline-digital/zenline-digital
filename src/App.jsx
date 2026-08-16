@@ -185,7 +185,7 @@ export default function App() {
   const month = 7; const year = 2026;
 
   // ── Monthly Brief state ───────────────────────────────────────────────────
-  const [briefInput, setBriefInput]             = useState("");
+  const briefInputRef = useRef(null);
   const [briefLoading, setBriefLoading]         = useState(false);
   const [briefSummarizing, setBriefSummarizing] = useState(false);
   const [briefSummary, setBriefSummary]         = useState(() => localStorage.getItem("zld_brief_summary") || "");
@@ -373,9 +373,9 @@ export default function App() {
 
   // ── Send Brief Message ────────────────────────────────────────────────────
   async function sendBriefMessage() {
-    const text = briefInput.trim();
+    const text = briefInputRef.current?.value?.trim() || "";
     if (!text || briefLoading) return;
-    setBriefInput("");
+    if (briefInputRef.current) briefInputRef.current.value = "";
     setBriefLoading(true);
     const userMsg = { role: "user", content: text, agent_id: "monthly_brief", created_at: new Date().toISOString() };
     setChatMessages(prev => ({ ...prev, "monthly_brief": [...(prev["monthly_brief"] || []), userMsg] }));
@@ -692,8 +692,7 @@ Return JSON only: {"caption":"full caption with emojis and CTA","hashtags":"#tag
 
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             <textarea
-              value={briefInput}
-              onChange={e => setBriefInput(e.target.value)}
+              ref={briefInputRef}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendBriefMessage(); } }}
               placeholder="e.g. Focus on Eid collection launch, more reels this month, target UAE gym owners..."
               rows={2}
@@ -701,8 +700,8 @@ Return JSON only: {"caption":"full caption with emojis and CTA","hashtags":"#tag
             />
             <button
               onClick={sendBriefMessage}
-              disabled={briefLoading || !briefInput.trim()}
-              style={{ ...btn(C.purple, false, { alignSelf: "flex-end", padding: "9px 20px", opacity: briefLoading || !briefInput.trim() ? 0.45 : 1 }) }}
+              disabled={briefLoading}
+              style={{ ...btn(C.purple, false, { alignSelf: "flex-end", padding: "9px 20px", opacity: briefLoading ? 0.45 : 1 }) }}
             >
               {briefLoading ? "..." : "Send"}
             </button>
