@@ -463,16 +463,24 @@ export default function App() {
         : "";
       if (briefSummary) log("Social Media Manager", "Monthly brief loaded", "Applying your discussion context to this plan...");
 
+      // Calculate which weeks remain in this month from today
+      const todayDate = new Date();
+      const todayDay = todayDate.getDate();
+      const startWeek = Math.ceil(todayDay / 7);          // e.g. day 17 → week 3
+      const weeksLeft = Math.min(4, 5 - startWeek);       // weeks remaining incl. current
+      const startW    = startWeek > 4 ? 4 : startWeek;   // cap at week 4
+
       // Generate week-by-week (5 posts each) to stay within Vercel 10s serverless limit
       const systemPrompt = `You are the Social Media Manager for THUGFIT, UAE premium gym activewear. Brand voice: ${brandVoice}${skillsCtx}${briefCtx}`;
       const allPosts = [];
-      for (let w = 1; w <= 4; w++) {
+      for (let w = startW; w <= 4; w++) {
         setActiveAgent("content");
         log("Content Strategist", `Planning Week ${w}`, `${MONTHS[month - 1]} ${year}`);
+        const isCurrentWeek = w === startW;
         const weekText = await claude(
           systemPrompt,
-          `Create exactly 5 Instagram posts for Week ${w} of ${MONTHS[month - 1]} ${year} (Monday to Friday).
-Pillars: motivation, training_tips, lifestyle, community, product (max 1 product per month total).
+          `Create exactly 5 Instagram posts for Week ${w} of ${MONTHS[month - 1]} ${year} (Monday to Friday).${isCurrentWeek ? " We are mid-week so topics should feel timely and current." : ""}
+Pillars: motivation, training_tips, lifestyle, community, product (max 1 product total across all weeks).
 UAE/Dubai fitness context. Specific compelling topics.
 Return ONLY a JSON array of 5 objects, no markdown:
 [{"week":${w},"day":"Monday","content_type":"motivation","topic":"specific title","theme":"visual direction","format":"single"}]
